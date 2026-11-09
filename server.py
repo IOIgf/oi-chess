@@ -71,6 +71,18 @@ SPFA_STALL_CHANCE = 0.20
 SPFA_STALL_EXTRA = 4.0
 O2_SPEED_MULT = 2.0
 
+# ---- New mechanics: pierce / splash / lifesteal / rampage / synergy / freeze ----
+PIERCE_RATIO = 0.50        # Extra damage to the enemy directly behind the target.
+SPLASH_RATIO = 0.35        # Extra damage to each orthogonally adjacent enemy.
+LIFESTEAL_RATIO = 0.30     # Fraction of dealt damage returned as HP.
+RAMPAGE_MULT = 1.6         # Attack multiplier while below the HP threshold.
+RAMPAGE_HP = 0.5           # Trigger when current HP / max HP is below this.
+SYNERGY_STEP = 0.12        # Attack gained per same-trait ally at spawn.
+SYNERGY_CAP = 4            # Maximum synergy stacks.
+FREEZE_RATIO = 0.40        # Damage ratio of the freeze active skill.
+FREEZE_STALL = 2.0         # Seconds of attack stall applied by freeze.
+SHOP_PITY_MULT = 4         # Shop weight multiplier for cards one copy from merging.
+
 EMPTY_PENALTY_INTERVAL = 2.0
 ENERGY_PER_ROUND = 25
 SKILL_ENERGY_COST = 1
@@ -184,6 +196,51 @@ CARDS_RAW = [
     ('matrix_pow', '\u77e9\u9635\u5feb\u901f\u5e42', 5, '\u7701\u9009', 1.25, 'math', 155, 1545, 15, 31, 'matrix_pow',
      '\u653b\u51fb\xd71.5\uff0c\u751f\u547d-10%',
      '\u88ab\u52a8\uff1a\u5165\u573a\u653b\u51fb \xd71.5\u3001\u751f\u547d\u4e0a\u9650 \xd70.9\uff1b\u6bcf 6 \u79d2\u653b\u51fb \xd71.2\uff08\u6700\u591a 3 \u5c42\uff09'),
+    ('two_pointers', '\u53cc\u6307\u9488', 1, '\u666e\u901a', 0.75, 'greedy', 42, 410, 4, 4, 'pierce',
+     '\u8d2f\u7a7f\u4e00\u7ebf',
+     '\u88ab\u52a8\uff1a\u666e\u653b\u547d\u4e2d\u540e\uff0c\u5bf9\u76ee\u6807\u6b63\u540e\u65b9\u540c\u5217\u76f8\u90bb\u7684\u654c\u4eba\u8ffd\u52a0 50% \u4f24\u5bb3'),
+    ('prefix_sum', '\u524d\u7f00\u548c', 1, '\u666e\u901a', 0.75, 'diff', 39, 392, 4, 4, 'synergy',
+     '\u7d2f\u52a0\u540c\u7c7b\u7684\u529b\u91cf',
+     '\u88ab\u52a8\uff1a\u5165\u573a\u65f6\u6bcf\u6709\u4e00\u540d\u540c\u6d41\u6d3e\u53cb\u519b\uff0c\u653b\u51fb +12%\uff08\u6700\u591a 4 \u5c42\uff09'),
+    ('huffman', '\u54c8\u592b\u66fc\u7f16\u7801', 1, '\u666e\u901a', 0.75, 'greedy', 40, 400, 4, 4, 'lifesteal',
+     '\u5e26\u6743\u8def\u5f84\u56de\u8840',
+     '\u88ab\u52a8\uff1a\u666e\u653b\u9020\u6210\u4f24\u5bb3\u540e\uff0c\u56de\u590d\u8be5\u6b21\u5b9e\u9645\u4f24\u5bb3 30% \u7684\u751f\u547d\uff08\u4e0d\u8d85\u8fc7\u4e0a\u9650\uff09'),
+    ('topo_sort', '\u62d3\u6251\u6392\u5e8f', 2, '\u666e\u901a', 0.75, 'graph_theory', 58, 575, 6, 9, 'freeze',
+     '\u51bb\u7ed3\u4f9d\u8d56\u73af',
+     '\u6280\u80fd\uff1a\u5c04\u7a0b\u5185\u5168\u4f53\u654c\u4eba\u53d7 40% \u4f24\u5bb3\u5e76\u505c\u653b 2 \u79d2'),
+    ('kmp', 'KMP', 2, '\u63d0\u9ad8', 1.05, 'string', 66, 650, 6, 9, 'pierce',
+     '\u5931\u914d\u4e0d\u56de\u9000',
+     '\u88ab\u52a8\uff1a\u666e\u653b\u547d\u4e2d\u540e\uff0c\u5bf9\u76ee\u6807\u6b63\u540e\u65b9\u540c\u5217\u76f8\u90bb\u7684\u654c\u4eba\u8ffd\u52a0 50% \u4f24\u5bb3'),
+    ('prim', '\u6700\u5c0f\u751f\u6210\u6811', 2, '\u63d0\u9ad8', 1.05, 'graph_theory', 63, 628, 6, 9, 'synergy',
+     '\u8fde\u8fb9\u6210\u7f51',
+     '\u88ab\u52a8\uff1a\u5165\u573a\u65f6\u6bcf\u6709\u4e00\u540d\u540c\u6d41\u6d3e\u53cb\u519b\uff0c\u653b\u51fb +12%\uff08\u6700\u591a 4 \u5c42\uff09'),
+    ('flood_fill', '\u6cdb\u6d2a\u586b\u5145', 2, '\u63d0\u9ad8', 1.05, 'search', 62, 615, 6, 9, 'splash',
+     '\u56db\u90bb\u6269\u6563',
+     '\u88ab\u52a8\uff1a\u666e\u653b\u65f6\uff0c\u5bf9\u76ee\u6807\u4e0a\u4e0b\u5de6\u53f3\u76f8\u90bb\u7684\u654c\u4eba\u5404\u9020\u6210 35% \u4f24\u5bb3'),
+    ('ac_automaton', 'AC \u81ea\u52a8\u673a', 3, '\u63d0\u9ad8', 1.05, 'string', 92, 905, 9, 16, 'splash',
+     '\u4e00\u6b21\u5339\u914d\uff0c\u591a\u70b9\u547d\u4e2d',
+     '\u88ab\u52a8\uff1a\u666e\u653b\u65f6\uff0c\u5bf9\u76ee\u6807\u4e0a\u4e0b\u5de6\u53f3\u76f8\u90bb\u7684\u654c\u4eba\u5404\u9020\u6210 35% \u4f24\u5bb3'),
+    ('tarjan', '\u5f3a\u8fde\u901a\u5206\u91cf', 3, '\u63d0\u9ad8', 1.05, 'graph_theory', 95, 940, 9, 16, 'synergy',
+     '\u540c\u73af\u5171\u632f',
+     '\u88ab\u52a8\uff1a\u5165\u573a\u65f6\u6bcf\u6709\u4e00\u540d\u540c\u6d41\u6d3e\u53cb\u519b\uff0c\u653b\u51fb +12%\uff08\u6700\u591a 4 \u5c42\uff09'),
+    ('minimax', '\u6781\u5c0f\u5316\u6781\u5927', 3, '\u63d0\u9ad8', 1.05, 'game_theory', 105, 1030, 9, 16, 'rampage',
+     '\u52a3\u52bf\u65f6\u640f\u5230\u5e95',
+     '\u88ab\u52a8\uff1a\u81ea\u8eab\u751f\u547d\u4f4e\u4e8e\u4e0a\u9650 50% \u65f6\uff0c\u653b\u51fb \xd71.6'),
+    ('suffix_array', '\u540e\u7f00\u6570\u7ec4', 3, '\u63d0\u9ad8', 1.05, 'string', 99, 980, 9, 16, 'pierce',
+     '\u6cbf\u540e\u7f00\u4e00\u8def\u7a7f\u900f',
+     '\u88ab\u52a8\uff1a\u666e\u653b\u547d\u4e2d\u540e\uff0c\u5bf9\u76ee\u6807\u6b63\u540e\u65b9\u540c\u5217\u76f8\u90bb\u7684\u654c\u4eba\u8ffd\u52a0 50% \u4f24\u5bb3'),
+    ('splay', '\u4f38\u5c55\u6811', 4, '\u7701\u9009', 1.25, 'data_structure', 148, 1480, 13, 25, 'lifesteal',
+     '\u8d8a\u4f38\u5c55\u8d8a\u8010\u4e45',
+     '\u88ab\u52a8\uff1a\u666e\u653b\u9020\u6210\u4f24\u5bb3\u540e\uff0c\u56de\u590d\u8be5\u6b21\u5b9e\u9645\u4f24\u5bb3 30% \u7684\u751f\u547d\uff08\u4e0d\u8d85\u8fc7\u4e0a\u9650\uff09'),
+    ('network_flow', '\u7f51\u7edc\u6d41', 4, '\u7701\u9009', 1.25, 'graph_theory', 150, 1495, 13, 25, 'freeze',
+     '\u6ee1\u6d41\u5373\u963b\u585e',
+     '\u6280\u80fd\uff1a\u5c04\u7a0b\u5185\u5168\u4f53\u654c\u4eba\u53d7 40% \u4f24\u5bb3\u5e76\u505c\u653b 2 \u79d2'),
+    ('fft', '\u5feb\u901f\u5085\u91cc\u53f6\u53d8\u6362', 5, '\u7701\u9009', 1.25, 'math', 153, 1530, 15, 31, 'synergy',
+     '\u5377\u79ef\u540c\u9891',
+     '\u88ab\u52a8\uff1a\u5165\u573a\u65f6\u6bcf\u6709\u4e00\u540d\u540c\u6d41\u6d3e\u53cb\u519b\uff0c\u653b\u51fb +12%\uff08\u6700\u591a 4 \u5c42\uff09'),
+    ('suffix_automaton', '\u540e\u7f00\u81ea\u52a8\u673a', 5, '\u7701\u9009', 1.25, 'string', 156, 1550, 15, 31, 'rampage',
+     '\u72b6\u6001\u538b\u7f29\uff0c\u7edd\u5883\u7ffb\u76d8',
+     '\u88ab\u52a8\uff1a\u81ea\u8eab\u751f\u547d\u4f4e\u4e8e\u4e0a\u9650 50% \u65f6\uff0c\u653b\u51fb \xd71.6'),
 ]
 
 RANGE_BY_COST = {1: 4, 2: 4, 3: 5, 4: 6, 5: 8}
@@ -191,7 +248,7 @@ RANGE_BY_COST = {1: 4, 2: 4, 3: 5, 4: 6, 5: 8}
 ACTIVE_SKILLS = frozenset({
     'line', 'multi', 'aoe', 'aoe_debuff', 'block_aoe', 'range_aoe',
     'delayed_line', 'swap_stats', 'sort_line', 'compress_line',
-    'pincer', 'partition', 'divide_conquer', 'sweep',
+    'pincer', 'partition', 'divide_conquer', 'sweep', 'freeze',
 })
 
 # \u5546\u5e97\u5237\u65b0\uff1a\u6bcf\u8f6e\u7b2c\u4e00\u6b21\u514d\u8d39\uff0c\u7b2c\u4e8c\u6b21\u8d77\u6309\u57fa\u7840\u4ef7\u683c\u9012\u589e\u3002
@@ -208,6 +265,24 @@ CARDS = [{
     'skillCost': SKILL_ENERGY_COST if c[10] in ACTIVE_SKILLS else 0,
 } for c in CARDS_RAW]
 CARD_ROLES = {'linear_dp': ('\u7ebf\u6027\u7fa4\u653b', '\u4e2d\u6392', '\u8ba9\u76ee\u6807\u884c\u6216\u5217\u805a\u96c6\uff0c\u6280\u80fd\u6309\u5c04\u7a0b\u7b5b\u9009\u3002'), 'tree_array': ('\u56e2\u961f\u6210\u957f', '\u4e2d\u540e\u6392', '\u53cb\u519b\u6bcf\u6b21\u666e\u653b\u6216\u65bd\u6cd5\u52a0\u5c42\uff0c\u9002\u5408\u884c\u52a8\u5bc6\u96c6\u7684\u9635\u5bb9\u3002'), 'monotonic_stack': ('\u5468\u671f\u7206\u53d1', '\u4e2d\u6392', '\u6bcf\u56db\u51fb\u7206\u53d1\uff0c\u907f\u514d\u8f93\u51fa\u4f4d\u8fc7\u65e9\u9635\u4ea1\u3002'), 'greedy': ('\u4f4e\u8d39\u6536\u5272', '\u4e2d\u6392', '\u4f18\u5148\u5c04\u7a0b\u5185\u6b8b\u8840\uff0c\u4e0d\u4f1a\u4e3a\u8fdc\u5904\u6b8b\u8840\u653e\u5f03\u5f53\u524d\u76ee\u6807\u3002'), 'sort': ('\u91cd\u6392\u63a7\u573a', '\u4e2d\u6392', '\u6270\u4e71\u5c04\u7a0b\u5185\u540c\u884c\u7ad9\u4f4d\uff0c\u4f24\u5bb3\u4e0d\u662f\u4e3b\u8981\u4ef7\u503c\u3002'), 'dfs': ('\u8fde\u9501\u6536\u5272', '\u4e2d\u6392', '\u51fb\u6740\u540e\u7acb\u5373\u7eed\u653b\uff0c\u672c\u573a\u6700\u591a\u8ffd\u52a0\u4e09\u6b21\u3002'), 'diff': ('\u5ef6\u65f6\u7fa4\u653b', '\u540e\u6392', '\u4f24\u5bb3\u5728\u6807\u8bb0\u4e24\u79d2\u540e\u7ed3\u7b97\uff0c\u4fdd\u62a4\u65bd\u6cd5\u8005\u4e89\u53d6\u591a\u6b21\u6807\u8bb0\u3002'), 'xor': ('\u9ad8\u653b\u53cd\u5236', '\u4fdd\u62a4\u4f4d', '\u4ea4\u6362\u5c04\u7a0b\u5185\u6700\u9ad8\u653b\u51fb\uff0c\u9002\u5408\u9488\u5bf9\u9ad8\u8d39\u6838\u5fc3\u3002'), 'gcd': ('\u5206\u62c5\u5766\u8f85', '\u524d\u4e2d\u6392', '\u4e0a\u4e0b\u5de6\u53f3\u63a5\u4f4f\u961f\u53cb\u7684\u4f24\u5bb3\uff0c\u5206\u62c5\u603b\u91cf\u4e3a30%\uff0c\u975e\u6bcf\u4e2agcd\u540430%\u3002'), 'bfs': ('\u5168\u573a\u51cf\u901f', '\u4fdd\u62a4\u4f4d', '\u5168\u573a\u4f24\u5bb3\u5e76\u9650\u65f6\u964d\u4f4e\u666e\u653b\u51c6\u5907\u901f\u5ea6\uff0c\u4e0d\u964d\u4f4e\u6280\u80fd\u9891\u7387\u3002'), 'pigeonhole': ('\u5bc6\u96c6\u514b\u5236', '\u4e2d\u6392', '\u654c\u65b9\u56f4\u7ed5\u76ee\u6807\u5bc6\u96c6\u65f6\u89e6\u53d1\u7ffb\u500d\uff0c\u5206\u6563\u654c\u4eba\u6536\u76ca\u4f4e\u3002'), 'prime_sieve': ('\u56de\u5408\u7206\u53d1', '\u4e2d\u6392', '\u7b2c2\u30013\u30015\u30017\u56de\u5408\u666e\u653b\u589e\u5f3a\uff0c\u975e\u8d28\u6570\u56de\u5408\u4fdd\u6301\u57fa\u7840\u8f93\u51fa\u3002'), 'mod_op': ('\u7a33\u5b9a\u5468\u671f\u8f93\u51fa', '\u4e2d\u6392', '\u6bcf\u4e09\u51fb2.5\u500d\uff0c\u9002\u5408\u7a33\u5b9a\u7ad9\u573a\u3002'), 'shift': ('\u73bb\u7483\u5927\u70ae', '\u540e\u6392', '\u6218\u5185\u653b\u51fb\u7ffb\u500d\u3001\u751f\u547d\u51cf\u534a\uff0c\u907f\u514d\u76f4\u63a5\u627f\u4f24\u3002'), 'range_dp': ('\u5c40\u90e8\u7fa4\u653b', '\u4e2d\u540e\u6392', '\u6253\u76ee\u6807\u53ca\u5de6\u53f3\u76f8\u90bb\u683c\uff0c\u514b\u5236\u6a2a\u5411\u5bc6\u96c6\u9635\u3002'), 'segment_tree': ('\u84c4\u529b\u7206\u53d1', '\u4e2d\u6392', '\u7b2c\u56db\u51fb\u7206\u53d1\uff0cO2\u53ef\u4ee5\u7f29\u77ed\u51c6\u5907\u5468\u671f\u3002'), 'sqrt_block': ('\u5206\u5757\u7fa4\u653b', '\u4e2d\u540e\u6392', '\u56fa\u5b9a\u68cb\u76d82\xd72\u5206\u5757\uff0c\u4e0d\u662f\u4ee5\u76ee\u6807\u4e3a\u5de6\u4e0a\u89d2\u4efb\u610f\u53d6\u5757\u3002'), 'pruning': ('\u788e\u4f24\u9632\u5fa1', '\u524d\u6392', '\u53ea\u9488\u5bf9\u4f4e\u4e8e\u81ea\u8eab\u653b\u51fb50%\u7684\u5355\u6b21\u4f24\u5bb3\uff0c\u91cd\u51fb\u4ecd\u5371\u9669\u3002'), 'ids': ('\u957f\u5c40\u8fdc\u7a0b', '\u540e\u6392', '\u7b2c\u4e00\u56de\u5408\u57fa\u7840\u5c04\u7a0b\uff0c\u968f\u56de\u5408\u9010\u6b65\u589e\u52a0\u3002'), 'merge_sort': ('\u751f\u547d\u8c03\u914d', '\u90bb\u63a5\u4fdd\u62a4\u4f4d', '\u5f00\u6218\u65f6\u4e3a\u8fde\u901a\u7ec4\u5747\u5206\u5f53\u524d\u751f\u547d\uff1b\u4e0d\u662f\u51ed\u7a7a\u6cbb\u7597\u3002'), 'quick_sort': ('\u9ad8\u653b\u70b9\u7fa4\u4f24', '\u4e2d\u540e\u6392', '\u5c04\u7a0b\u5185\u6309\u5f53\u524d\u653b\u51fb\u6392\u5e8f\uff0c\u4f18\u5148\u6253\u8f93\u51fa\u4f4d\u3002'), 'divide': ('\u6761\u4ef6\u7fa4\u7206', '\u4e2d\u540e\u6392', '\u7b2c\u4e00\u6bb5\u672a\u51fb\u6740\u4efb\u4f55\u76ee\u6807\u624d\u6709\u8865\u5200\u6bb5\u3002'), 'inverse': ('\u666e\u653b\u53cd\u5236', '\u524d\u6392', '\u6309\u5b9e\u9645\u635f\u5931\u751f\u547d\u53cd\u5f39\uff0c\u4e0d\u53cd\u5f39\u88ab\u62a4\u76fe\u5438\u6536\u7684\u90e8\u5206\u3002'), 'bitmask_dp': ('\u540c\u884c\u534f\u540c\u70ae', '\u540c\u884c\u4fdd\u62a4\u4f4d', '\u540c\u884c\u9ad8\u653b\u51fb\u961f\u53cb\u589e\u5f3a\u6280\u80fd\uff0c\u9700\u517c\u987e\u5c04\u7a0b\u4e0e\u7ad9\u4f4d\u3002'), 'monotonic_queue': ('\u9ad8\u653b\u538b\u5236', '\u4e2d\u6392', '\u4f18\u5148\u653b\u51fb\u5c04\u7a0b\u5185\u6700\u9ad8\u653b\u51fb\u8005\uff0c\u53ef\u80fd\u653e\u8fc7\u6b8b\u8840\u3002'), 'a_star': ('\u9ad8\u8d39\u6536\u5272', '\u4e2d\u540e\u6392', '\u9ad8\u57fa\u7840\u9762\u677f\u8865\u5200\uff0c\u76ee\u6807\u4f18\u5148\u7ea7\u53d7\u5c04\u7a0b\u7ea6\u675f\u3002'), 'bidirectional': ('\u53cc\u7aef\u6253\u51fb', '\u4e2d\u540e\u6392', '\u5c04\u7a0b\u5185\u6700\u8fd1\u4e0e\u6700\u8fdc\u5404\u4e00\u51fb\uff0c\u53ea\u6709\u4e00\u540d\u654c\u4eba\u65f6\u4e0d\u91cd\u590d\u3002'), 'fermat': ('\u56de\u5408\u7206\u53d1', '\u4e2d\u540e\u6392', '\u8d28\u6570\u56de\u5408\u589e\u5f3a\uff0c\u9002\u5408\u6309\u56de\u5408\u89c4\u5212\u6295\u5165\u3002'), 'expectation': ('\u7a33\u5b9a\u5355\u4f53', '\u4e2d\u540e\u6392', '\u6052\u5b9a\u666e\u653b\u500d\u7387\uff0c\u9002\u5408\u9700\u8981\u7a33\u5b9a\u8f93\u51fa\u7684\u9635\u5bb9\u3002'), 'sweep_line': ('\u540c\u884c\u9012\u589e\u7fa4\u653b', '\u4e2d\u540e\u6392', '\u76ee\u6807\u540c\u884c\u81f3\u591a\u4e09\u4eba\uff0c\u7531\u8fd1\u5230\u8fdc\u9012\u589e\u3002'), 'cdq': ('\u540e\u7a0b\u6838\u5fc3', '\u4fdd\u62a4\u540e\u6392', '\u524d10\u79d2\u504f\u5f31\uff0c\u6b64\u540e\u7206\u53d1\uff0c\u5fc5\u987b\u4fdd\u62a4\u5230\u540e\u534a\u573a\u3002'), 'spfa': ('\u968f\u673a\u505c\u987f\u8f93\u51fa', '\u4fdd\u62a4\u4e2d\u540e\u6392', '\u653b\u901f\u5feb\u3001\u653b\u51fb\u9ad8\uff0c\u4f46\u6bcf\u6b21\u666e\u653b\u540e20%\u6982\u7387\u989d\u5916\u53614\u79d2\u3002'), 'o2': ('\u7ad9\u4f4d\u653b\u901f\u6838\u5fc3', '\u90bb\u63a5\u4fdd\u62a4\u4f4d', '0\u653b\u51fb\u3001280\u8840\uff1b\u8986\u76d6\u591a\u4eba\u518d\u6295\u5165\uff0c\u5206\u6563\u6216\u4e3b\u52a8\u6280\u80fd\u9635\u5bb9\u4e0d\u5b9c\u76f2\u5e26\u3002'), 'genetic': ('\u6c38\u4e45\u6210\u957f\u6838\u5fc3', '\u4fdd\u62a4\u4e2d\u540e\u6392', '\u51fb\u6740\u53e0\u5c42\u6700\u591a\u4e09\u5c42\uff0c\u5e78\u5b58\u68cb\u5b50\u7684\u5c42\u6570\u8de8\u56de\u5408\u4fdd\u7559\u3002'), 'matrix_pow': ('\u9ad8\u8d39\u65f6\u95f4\u6838\u5fc3', '\u540e\u6392', '\u5165\u573a\u653b\u9ad8\u8840\u51cf\uff0c6/12/18\u79d2\u9010\u6b65\u6210\u957f\u3002')}
+CARD_ROLES.update({
+    'two_pointers': ('\u7a7f\u900f\u8865\u5200', '\u4e2d\u6392', '\u6cbf\u654c\u4eba\u7eb5\u5217\u7ad9\u4f4d\uff0c\u666e\u653b\u80fd\u987a\u5e26\u6253\u5230\u76ee\u6807\u8eab\u540e\u7684\u654c\u4eba\u3002'),
+    'prefix_sum': ('\u540c\u6d41\u6d3e\u6210\u957f', '\u4e2d\u540e\u6392', '\u4e0e\u540c\u6d41\u6d3e\u5361\u4e00\u8d77\u4e0a\u573a\uff0c\u5165\u573a\u653b\u51fb\u9010\u5c42\u63d0\u9ad8\u3002'),
+    'huffman': ('\u7eed\u822a\u8f93\u51fa', '\u4e2d\u6392', '\u666e\u653b\u6309\u5b9e\u9645\u4f24\u5bb3\u56de\u8840\uff0c\u9002\u5408\u6301\u4e45\u6218\u800c\u975e\u7206\u53d1\u3002'),
+    'topo_sort': ('\u5168\u573a\u505c\u6ede', '\u540e\u6392', '\u5c04\u7a0b\u5185\u5168\u4f53\u505c\u653b 2 \u79d2\uff0c\u4e3a\u53cb\u519b\u4e89\u53d6\u51fa\u624b\u7a97\u53e3\u3002'),
+    'kmp': ('\u7a7f\u900f\u70b9\u6740', '\u4e2d\u6392', '\u6a21\u5f0f\u4e32\u4e0d\u56de\u9000\uff0c\u666e\u653b\u6cbf\u7eb5\u5217\u7a7f\u900f\u5230\u7b2c\u4e8c\u4e2a\u76ee\u6807\u3002'),
+    'prim': ('\u8fde\u8fb9\u534f\u540c', '\u4e2d\u540e\u6392', '\u540c\u6d41\u6d3e\u53cb\u519b\u8d8a\u591a\uff0c\u5165\u573a\u653b\u51fb\u8d8a\u9ad8\u3002'),
+    'flood_fill': ('\u56db\u90bb\u6e85\u5c04', '\u4e2d\u6392', '\u654c\u65b9\u5bc6\u96c6\u7ad9\u4f4d\u65f6\uff0c\u4e00\u6b21\u666e\u653b\u80fd\u6e85\u5230\u591a\u4e2a\u76f8\u90bb\u76ee\u6807\u3002'),
+    'ac_automaton': ('\u591a\u70b9\u6e85\u5c04', '\u4e2d\u540e\u6392', '\u9ad8\u9762\u677f\u914d\u56db\u90bb\u6e85\u5c04\uff0c\u9002\u5408\u6e05\u7406\u62b1\u56e2\u654c\u4eba\u3002'),
+    'tarjan': ('\u540c\u73af\u5171\u632f', '\u4e2d\u540e\u6392', '\u5f3a\u8fde\u901a\u5206\u91cf\u5185\u53cb\u519b\u4e92\u76f8\u62ac\u653b\u51fb\uff0c\u8d8a\u96c6\u4e2d\u8d8a\u5f3a\u3002'),
+    'minimax': ('\u6b8b\u8840\u7ffb\u76d8', '\u524d\u4e2d\u6392', '\u751f\u547d\u8dcc\u7834\u4e00\u534a\u540e\u653b\u51fb \xd71.6\uff0c\u9002\u5408\u9876\u5728\u524d\u6392\u6362\u8840\u3002'),
+    'suffix_array': ('\u7eb5\u5217\u7a7f\u900f', '\u4e2d\u540e\u6392', '\u9ad8\u9762\u677f\u7a7f\u900f\uff0c\u4e13\u6253\u524d\u540e\u91cd\u53e0\u7684\u53cc\u76ee\u6807\u3002'),
+    'splay': ('\u9ad8\u7eed\u822a\u524d\u6392', '\u524d\u6392', '\u9ad8\u653b\u8840\u914d\u5438\u8840\uff0c\u7ad9\u5f97\u4f4f\u624d\u6709\u8f93\u51fa\u3002'),
+    'network_flow': ('\u5168\u573a\u963b\u585e', '\u540e\u6392', '\u9ad8\u8d39\u4e3b\u52a8\uff0c\u5c04\u7a0b\u5185\u5168\u4f53\u505c\u653b\uff0c\u914d\u5408\u7206\u53d1\u6536\u573a\u3002'),
+    'fft': ('\u540c\u9891\u534f\u540c', '\u540e\u6392', '\u5c04\u7a0b 8\uff0c\u4e0e\u540c\u6d41\u6d3e\u4e00\u8d77\u4e0a\u573a\u65f6\u653b\u51fb\u8fdb\u4e00\u6b65\u653e\u5927\u3002'),
+    'suffix_automaton': ('\u7edd\u5883\u6536\u5272', '\u524d\u4e2d\u6392', '\u6700\u9ad8\u9762\u677f\u4e4b\u4e00\uff0c\u6b8b\u8840\u540e\u8fdb\u5165 \xd71.6 \u7684\u7ffb\u76d8\u533a\u95f4\u3002'),
+})
+
 for _card in CARDS:
     _card['role'], _card['position'], _card['tip'] = CARD_ROLES[_card['id']]
     _card['baseInterval'] = 0 if _card['id'] == 'o2' else ATK_CD / (SPFA_SPEED_MULT if _card['id'] == 'spfa' else 1.0)
@@ -229,6 +304,7 @@ TRAITS = {
     'diff': '\u5dee\u5206', 'bitwise': '\u4f4d\u8fd0\u7b97', 'number_theory': '\u6570\u8bba',
     'combinatorics': '\u7ec4\u5408\u6570\u5b66', 'probability': '\u6982\u7387\u671f\u671b',
     'geometry': '\u8ba1\u7b97\u51e0\u4f55', 'math': '\u6570\u5b66', 'optimization': '\u4f18\u5316',
+    'graph_theory': '\u56fe\u8bba', 'string': '\u5b57\u7b26\u4e32', 'game_theory': '\u535a\u5f08',
 }
 
 DATA_LOCK = threading.RLock()
@@ -508,18 +584,31 @@ class Room:
                 weights.append(SHOP_WEIGHT_BASE ** (top - c['cost']))
         return ids, weights
 
-    def _roll_shop(self, level, count=5):
-        # Level now drives the pool. At level 1 this is exactly the old
-        # 1-cost-only behaviour; higher levels only ADD higher cost cards.
-        # Card prices, energy and reason costs never change.
+    def _roll_shop(self, level, count=5, owner=None):
+        # Level drives the pool; a card one copy short of a merge is weighted
+        # up so a larger card pool does not make 3-star upgrades unreachable.
         ids, weights = self._shop_pool(level)
+        if owner is not None:
+            near = self._near_merge_ids(owner)
+            if near:
+                weights = [w * (SHOP_PITY_MULT if cid in near else 1)
+                           for cid, w in zip(ids, weights)]
         return random.choices(ids, weights=weights, k=count)
+
+    @staticmethod
+    def _near_merge_ids(p):
+        counts = {}
+        for info in list(p['board'].values()) + list(p['bench']):
+            key = (info['card'], unit_star(info))
+            counts[key] = counts.get(key, 0) + 1
+        return {cid for (cid, _), n in counts.items()
+                if n >= MERGE_COPIES - 1}
 
     def _roll_all_shops(self):
         for p in self.players.values():
             if p.get('dead') or p.get('abandoned'):
                 continue
-            p['shop'] = self._roll_shop(p['level'])
+            p['shop'] = self._roll_shop(p['level'], owner=p)
 
     # ---- \u5f00\u5c40 --------------------------------------------------------------
     def start(self, pid):
@@ -594,7 +683,7 @@ class Room:
                 return False, '\u91d1\u5e01\u4e0d\u8db3'
             p['gold'] -= cost
             p['shopRefreshes'] = int(p.get('shopRefreshes', 0) or 0) + 1
-            p['shop'] = self._roll_shop(p['level'])
+            p['shop'] = self._roll_shop(p['level'], owner=p)
             self.version += 1
             return True, None
 
@@ -990,7 +1079,7 @@ class Room:
             if p['reason'] > 0:
                 p['crashed'] = False
             p['level'] = level_for_round(self.round)
-            cid = self._roll_shop(p['level'], 1)[0]
+            cid = self._roll_shop(p['level'], 1, owner=p)[0]
             if len(p['bench']) < MAX_BENCH or self._would_merge(p, cid, 1):
                 p['bench'].append(make_card_obj(cid))
                 self._try_merge(p)
@@ -1073,6 +1162,7 @@ class Room:
             'card': card['id'], 'star': star, 'x': x, 'y': by,
             'hp': float(hp), 'maxHp': max_hp,
             'atk': atk, 'baseAtk': atk, 'range': rng, 'skill': skill,
+            'trait': card['trait'],
             'active': skill in ACTIVE_SKILLS,
             'atkCd': 0.0, 'skillCd': 0.0, 'slowUntil': -1.0,
             'stallUntil': -1.0, 'actionUntil': -1.0,
@@ -1108,6 +1198,15 @@ class Room:
                     if o is not u and o['owner'] == u['owner'] and self._dist(u, o) == 1:
                         edges[u['uid']].add(o['uid'])
                         edges[o['uid']].add(u['uid'])
+        for u in units:
+            if u['skill'] == 'synergy':
+                peers = sum(1 for o in units
+                            if o is not u and o['hp'] > 0
+                            and o['owner'] == u['owner']
+                            and o['trait'] == u['trait'])
+                if peers:
+                    gain = 1.0 + SYNERGY_STEP * min(SYNERGY_CAP, peers)
+                    u['atk'] = u['baseAtk'] = u['atk'] * gain
         while unseen:
             key = next(iter(unseen))
             group, todo = [], [key]
@@ -1273,6 +1372,8 @@ class Room:
                        and abs(e['x'] - target['x']) <= 1 and abs(e['y'] - target['y']) <= 1)
             if near >= 3:
                 base *= 2.0
+        if sk == 'rampage' and u['hp'] < u['maxHp'] * RAMPAGE_HP:
+            base *= RAMPAGE_MULT
         return base
 
     def _do_attack(self, u, target, units, events, t, by_uid, round_no):
@@ -1287,6 +1388,40 @@ class Room:
                        'dmg': dealt, 'owner': u['owner'], 'sourceUid': u['uid'], 'targetUid': target['uid'], 'skillId': u['skill']})
 
         self._notify_ally_action(u, units)
+
+        sk = u['skill']
+        if sk == 'pierce':
+            dy = 1 if target['y'] >= u['y'] else -1
+            back = [e for e in units
+                    if e['hp'] > 0 and e['owner'] != u['owner']
+                    and e['x'] == target['x'] and e['y'] == target['y'] + dy]
+            for e in back[:1]:
+                dmg = self._deal_damage(e, raw * PIERCE_RATIO, events, t, units,
+                                        by_uid, source=u)
+                events.append({'t': round(t, 6), 'type': 'attack',
+                               'fromX': int(u['x']), 'fromY': int(u['y']),
+                               'toX': int(e['x']), 'toY': int(e['y']),
+                               'dmg': dmg, 'owner': u['owner'], 'skill': True,
+                               'skillId': 'pierce', 'sourceUid': u['uid'], 'targetUid': e['uid']})
+        elif sk == 'splash':
+            for e in units:
+                if e['hp'] <= 0 or e['owner'] == u['owner'] or e is target \
+                        or self._dist(e, target) != 1:
+                    continue
+                dmg = self._deal_damage(e, raw * SPLASH_RATIO, events, t, units,
+                                        by_uid, source=u)
+                events.append({'t': round(t, 6), 'type': 'attack',
+                               'fromX': int(u['x']), 'fromY': int(u['y']),
+                               'toX': int(e['x']), 'toY': int(e['y']),
+                               'dmg': dmg, 'owner': u['owner'], 'skill': True,
+                               'skillId': 'splash', 'sourceUid': u['uid'], 'targetUid': e['uid']})
+        if sk == 'lifesteal' and dealt > 0 and u['hp'] > 0:
+            heal = min(u['maxHp'] - u['hp'], int(dealt * LIFESTEAL_RATIO))
+            if heal > 0:
+                u['hp'] += heal
+                events.append({'t': round(t, 6), 'type': 'heal',
+                               'x': int(u['x']), 'y': int(u['y']),
+                               'owner': u['owner'], 'dmg': heal, 'uid': u['uid']})
 
         if target['hp'] > 0 or u['hp'] <= 0:
             return
@@ -1401,6 +1536,10 @@ class Room:
                          key=lambda e: abs(e['x'] - u['x']))
             for i, e in enumerate(row[:3]):
                 hit(e, 0.6 + 0.3 * i)
+        elif sk == 'freeze':
+            for e in enemies:
+                hit(e, FREEZE_RATIO)
+                e['stallUntil'] = max(e['stallUntil'], t + FREEZE_STALL)
 
     def _simulate_battle(self, a, b, round_no, record=True):
         stats = {}

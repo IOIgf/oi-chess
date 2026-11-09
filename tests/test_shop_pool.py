@@ -42,8 +42,21 @@ gifts = [r._roll_shop(1, 1)[0] for _ in range(500)]
 assert all(s.CARD_BY_ID[i]['cost'] == 1 for i in gifts)
 
 # 卡池改动不得触碰卡牌数值或战斗常量
-assert len(s.CARDS) == 35
+assert len(s.CARDS) == 50
 assert s.CARD_BY_ID['o2']['hp'] == 280 and s.CARD_BY_ID['spfa']['hp'] == 1000
 
+# 升星保底：差一张即可合成的卡在商店里权重 ×4，缓解 50 张卡池的稀释。
+two = {'board': {'0,0': s.make_card_obj('greedy'),
+                 '1,0': s.make_card_obj('greedy')},
+       'bench': []}
+one = {'board': {'0,0': s.make_card_obj('greedy')}, 'bench': []}
+assert r._near_merge_ids(two) == {'greedy'}
+assert r._near_merge_ids(one) == set()
+base = collections.Counter(r._roll_shop(1, 20000))
+pity = collections.Counter(r._roll_shop(1, 20000, owner=two))
+assert pity['greedy'] > base['greedy'] * 2, (base['greedy'], pity['greedy'])
+# 无 owner 时行为必须与旧版完全一致（保底不改变默认卡池分布）。
+assert set(r._roll_shop(1, 200)) <= set(r._shop_pool(1)[0])
+
 print('PASS shop pool: level 1 == legacy 1-cost-only, unlocks 1..L, '
-      'weights ordered, gift uses level pool, card data unchanged')
+      'weights ordered, gift uses level pool, merge pity, card data unchanged')

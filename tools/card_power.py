@@ -65,10 +65,26 @@ JUDGE = {
     # 4 / 5 费
     'genetic':        dict(aoe=0.05, spd=0.35, skill=0.65, why='每次击杀永久 +15% 攻击（3 层），滚起来无解'),
     'matrix_pow':     dict(aoe=0.05, spd=0.35, skill=0.62, why='每 6 秒攻击 ×1.2（3 层）+ 射程 8，站最远也能打到全场'),
+    # ---- New cards (50-card pool) ------------------------------------
+    'two_pointers':    dict(aoe=0.35, spd=0.30, skill=0.55, why='普攻穿透到目标身后的敌人，纵列站位收益最高'),
+    'prefix_sum':      dict(aoe=0.05, spd=0.30, skill=0.60, why='入场按同流派友军数叠攻击，最多 4 层 +48%'),
+    'huffman':         dict(aoe=0.05, spd=0.30, skill=0.60, why='普攻按实际伤害回血 30%，越持久越难被磨死'),
+    'topo_sort':       dict(aoe=0.70, spd=0.40, skill=0.75, why='射程内全体 40% 伤害并停攻 2 秒，控制与群伤兼备'),
+    'kmp':             dict(aoe=0.35, spd=0.30, skill=0.55, why='失配不回退，普攻沿纵列穿透第二个目标'),
+    'prim':            dict(aoe=0.05, spd=0.30, skill=0.60, why='连边成网，同流派友军越多入场攻击越高'),
+    'flood_fill':      dict(aoe=0.50, spd=0.30, skill=0.50, why='普攻向目标四邻溅射 35%，克制抱团站位'),
+    'ac_automaton':    dict(aoe=0.50, spd=0.30, skill=0.50, why='一次匹配多点命中，高面板四邻溅射'),
+    'tarjan':          dict(aoe=0.05, spd=0.30, skill=0.60, why='强连通分量内同流派友军互相抬攻击'),
+    'minimax':         dict(aoe=0.05, spd=0.30, skill=0.55, why='生命跌破一半后攻击 ×1.6，适合前排换血翻盘'),
+    'suffix_array':    dict(aoe=0.35, spd=0.30, skill=0.55, why='高面板纵列穿透，专打前后重叠双目标'),
+    'splay':           dict(aoe=0.05, spd=0.30, skill=0.60, why='高攻血配 30% 吸血，站得住才有输出'),
+    'network_flow':    dict(aoe=0.70, spd=0.40, skill=0.75, why='高费主动，射程内全体 40% 伤害并停攻 2 秒'),
+    'fft':             dict(aoe=0.05, spd=0.30, skill=0.60, why='卷积同频，射程 8 且同流派齐上场时攻击进一步放大'),
+    'suffix_automaton':dict(aoe=0.05, spd=0.30, skill=0.55, why='最高面板之一，残血进入 ×1.6 的翻盘区间'),
 }
 
 TEAM_CARDS = {'gcd', 'tree_array', 'merge_sort', 'o2'}
-HP_CAP = 1510.0     # 全池最高有效生命（遗传算法）
+HP_CAP = 1550.0     # 全池最高有效生命（后缀自动机 1550）
 ATK_CAP = 232.0     # 全池最高有效攻击（矩阵快速幂 155×1.5）
 GOLD_PER_ROUND, ENERGY_PER_ROUND, REASON_PER_ROUND = 20.0, 25.0, 16.0
 
@@ -339,10 +355,11 @@ def write_html(rows, rows_a, measured, mixed, path):
     weights = ' / '.join(W_NAME[k]+' '+str(round(W_B[k]*100))+'%' for k in W_B)
     total = meta.get('total', 0)
     nchecks = read_json('tests/mechanics_audit_results.json', {}).get('passed', 165)
+    ncards = len(rows)
     page = HTML_HEAD + f"""
 <h1>OI-chess · 实战与定位</h1>
-<div class="sub">35 张卡 · 精确事件计时 · 战力 /1000 · 性价比 /10 · 终版实战 {total:,} 场</div>
-<div class="kpis"><div class="kpi"><div class="k">机制合同</div><div class="v">{nchecks} 项</div><div class="n">覆盖全部 35 张卡</div></div><div class="kpi"><div class="k">理论时序</div><div class="v">18 组</div><div class="n">攻击时间与次数逐次校验</div></div><div class="kpi"><div class="k">O2 当前值</div><div class="v">280 HP</div><div class="n">3 金 / 周围八格攻速 ×2</div></div></div>
+<div class="sub">{ncards} 张卡 · 精确事件计时 · 战力 /1000 · 性价比 /10 · 终版实战 {total:,} 场</div>
+<div class="kpis"><div class="kpi"><div class="k">机制合同</div><div class="v">{nchecks} 项</div><div class="n">覆盖全部 {ncards} 张卡</div></div><div class="kpi"><div class="k">理论时序</div><div class="v">18 组</div><div class="n">攻击时间与次数逐次校验</div></div><div class="kpi"><div class="k">O2 当前值</div><div class="v">280 HP</div><div class="n">3 金 / 周围八格攻速 ×2</div></div></div>
 <h2>口径与权重</h2><p>{weights}</p>
 <div class="note">战力与性价比是带权模型估计，不是战斗伤害或胜率的保证。普攻攻速维度改为实际理论频率；SPFA 长期期望间隔为 2/1.5 + 20%×4 ≈ 2.133333 秒，不卡时仍为 1.333333 秒。O2 的站位价值不能由纯卡赛代表。</div>
 <p>统一伤害：基础攻击 × 入场倍率 × 技能倍率 × 1/3 × 心态输出倍率 × 承伤倍率，向下取整（最小 1）；随后处理减免、分担与护盾。无法攻击的 O2 不触发最小伤害。生命有各自上限，过量伤害不计为实际损血。</p>
@@ -350,7 +367,7 @@ def write_html(rows, rows_a, measured, mixed, path):
 <h2>全卡强度与定位</h2><div class="tools"><input id="q" placeholder="搜索名称 / 定位" oninput="draw()" aria-label="搜索卡牌"><select id="tier" onchange="draw()" style="padding:6px"><option value="0">全部费用</option><option>1</option><option>2</option><option>3</option><option>4</option><option>5</option></select><select id="order" onchange="draw()" style="padding:6px"><option value="power">模型战力</option><option value="mix">参考混编</option><option value="div">多样混编</option><option value="value">性价比</option></select></div>
 <div class="tablewrap"><table><thead><tr><th class="l">卡牌 / 定位</th><th>费</th><th>攻 / 战内血</th><th>战力</th><th>性价比</th><th>纯卡积分率</th><th>参考混编 ΔHP</th><th>多样混编 ΔHP</th></tr></thead><tbody id="cardRows"></tbody></table></div>
 <div class="note">点击卡牌可展开机制、六维贡献、站位建议及三个场景的实际胜场积分率。ΔHP 是各自剩余生命比例之差，不是胜率。胜场积分率按游戏规则「幸存棋子数量更多者胜」，胜=1、平=0.5、负=0。</div>
-<h2>实战方法</h2><p>纯卡：5 张同卡对战其余 34 种卡，每种对手 {meta.get('trials',32)} 场，交替先后手。参考混编：4 张模运算 + 被测卡，对 5 张模运算，每卡 {meta.get('mixed_trials',200)} 场。多样混编：gcd / 模运算 / BFS / 单调队列 + 被测卡，对相同四张 + 同费参考卡。参考卡为 1费贪心、2费模运算、3费期望、4费遗传、5费矩阵快速幂。</p>
+<h2>实战方法</h2><p>纯卡：5 张同卡对战其余 {ncards-1} 种卡，每种对手 {meta.get('trials',32)} 场，交替先后手。参考混编：4 张模运算 + 被测卡，对 5 张模运算，每卡 {meta.get('mixed_trials',200)} 场。多样混编：gcd / 模运算 / BFS / 单调队列 + 被测卡，对相同四张 + 同费参考卡。参考卡为 1费贪心、2费模运算、3费期望、4费遗传、5费矩阵快速幂。</p>
 <p>随机站位、回合 2–9、心态 100、每队精力 40；随机种子 {meta.get('seed',20261117)}。阵容不同意味着这不是全局天梯胜率，也不代表所有站位。单次混编均值的不确定性约为 ±1.96×标准误；小差距不做强弱定论。</p>
 <h2>辅助与特殊场景</h2><p>O2 保留 280 血，必须比较覆盖与占位代价；BFS 的全场减速、异或的高攻反制、归并排序的生命调配也不能靠全同卡赛定论。参见《完整检查与平衡报告.md》中的 O2 定向对照与永久成长说明。</p>
 <div class="foot">来源：server.py（当前规则与卡面） / audit/final（终版实战） / tests/test_mechanics_audit.py（机制合同）。旧版历史结果已归档，不作为本表当前结果。模型不声称精确预测多目标技能与站位辅助的实战伤害。</div>

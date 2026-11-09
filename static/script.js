@@ -48,7 +48,7 @@ function toggleFxMode() {
   syncFxMode();
 }
 window.addEventListener('DOMContentLoaded', syncFxMode);
-const SKILL_LABELS = {line:'线性扫描',multi:'连击',aoe:'范围冲击',aoe_debuff:'广搜减速',range_aoe:'区间打击',block_aoe:'分块打击',delayed_line:'延迟标记',swap_stats:'交换攻击',sort_line:'重排站位',compress_line:'同行压缩',pincer:'两端夹击',partition:'高攻分区',divide_conquer:'分治追击',sweep:'扫描递增'};
+const SKILL_LABELS = {line:'线性扫描',multi:'连击',aoe:'范围冲击',aoe_debuff:'广搜减速',range_aoe:'区间打击',block_aoe:'分块打击',delayed_line:'延迟标记',swap_stats:'交换攻击',sort_line:'重排站位',compress_line:'同行压缩',pincer:'两端夹击',partition:'高攻分区',divide_conquer:'分治追击',sweep:'扫描递增',freeze:'冻结',pierce:'穿透',splash:'溅射',lifesteal:'汲取',rampage:'背水',synergy:'协同'};
 function effectKind(skill) {
   if (['aoe_debuff','swap_stats','sort_line'].includes(skill)) return 'control';
   if (skill === 'delayed_line') return 'delay';
@@ -1405,6 +1405,8 @@ function playEventsUpTo(d, elapsed) {
 
     } else if (e.type === 'shield') {
       FX.shield(e.x, e.y, e.dmg || 0);
+    } else if (e.type === 'heal') {
+      FX.heal(e.x, e.y, e.dmg || 0);
     }
   }
 }

@@ -4,7 +4,7 @@ from pathlib import Path
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'tools'))
 import card_power as C
 R=Path(__file__).resolve().parents[1];s=C.load_server();rows,measured=C.score_all();mixed=C.load_mixed()
-assert len(s.CARDS)==len(rows)==len(measured)==len(mixed)==35
+assert len(rows)==len(measured)==len(mixed)==len(s.CARDS)==50
 assert max(x['power'] for x in rows)==1000
 for x in rows:
     c=s.CARD_BY_ID[x['id']];m=measured[x['id']];mx=mixed[x['name']]
@@ -19,7 +19,7 @@ for x in rows:
 meta=json.loads((R/'audit/final/meta.json').read_text())
 assert meta['source_sha256']==hashlib.sha256((R/'server.py').read_bytes()).hexdigest()
 cs=list(csv.DictReader((R/'卡牌战力评分.csv').open(encoding='utf-8-sig')))
-assert len(cs)==35
+assert len(cs)==len(s.CARDS)
 for x in cs:assert x['实测纯卡净胜血量'] and x['实测混编净胜血量'] and x['多样混编净胜血量']
 assert next(x for x in cs if x['ID']=='o2')['生命']=='280'
 assert next(x for x in cs if x['ID']=='spfa')['生命']=='1000'
@@ -28,13 +28,14 @@ with sync_playwright() as p:
     b=p.chromium.launch();pg=b.new_page(viewport={'width':1440,'height':960});errors=[]
     pg.on('pageerror',lambda e:errors.append(str(e)))
     pg.goto((R/'卡牌战力评分.html').as_uri(),wait_until='load')
-    assert pg.locator('#cardRows > tr').count()==35
+    assert pg.locator('#cardRows > tr').count()==len(s.CARDS)
     pg.fill('#q','O2');assert pg.locator('#cardRows > tr').count()==1
     pg.locator('#cardRows summary').click();assert pg.locator('details[open]').count()==1
     assert '280' in pg.locator('#cardRows').inner_text()
-    pg.fill('#q','');pg.select_option('#tier','3');assert pg.locator('#cardRows > tr').count()==10
-    pg.select_option('#order','mix');assert pg.locator('#cardRows > tr').count()==10
+    n3 = sum(1 for c in s.CARDS if c['cost']==3)
+    pg.fill('#q','');pg.select_option('#tier','3');assert pg.locator('#cardRows > tr').count()==n3
+    pg.select_option('#order','mix');assert pg.locator('#cardRows > tr').count()==n3
     assert not errors,errors
     pg.select_option('#tier','0');pg.screenshot(path=str(R/'audit/fx/score-table.png'),full_page=True)
     b.close()
-print('PASS report audit: 35 current cards, all measured columns, exact source hash, cost/weight formulas, HTML controls')
+print('PASS report audit: %d current cards, all measured columns, exact source hash, cost/weight formulas, HTML controls' % len(s.CARDS))

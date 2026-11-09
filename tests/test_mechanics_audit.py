@@ -16,7 +16,7 @@ def skill(cid,coords):
     u=unit(cid);es=[unit(owner='B',x=x,y=y) for x,y in coords];us=[u]+es;ev=[]
     r._use_skill(u,es[0],es,us,ev,0,{a['uid']:a for a in us},3)
     return u,es,ev
-# 数值与元数据（全部 35 张）。
+# 数值与元数据（全部 50 张）。
 for c in s.CARDS:
     ok(c['active']==(c['skill'] in s.ACTIVE_SKILLS),c['id']+' active flag')
     ok(c['desc'].startswith('技能：' if c['active'] else '被动：'),c['id']+' description kind')
@@ -106,7 +106,7 @@ a=unit('merge_sort',x=3,y=4,hp=100);b=unit(x=4,y=4,hp=101);a['maxHp']=b['maxHp']
 r._apply_spawn_passives([a,b]);ok(sorted([a['hp'],b['hp']])==[100,101],'merge integer HP remainder')
 print('PASS full mechanics audit:',len(checks),'checks')
 Path(__file__).with_name('mechanics_audit_results.json').write_text(json.dumps({'passed':len(checks),'cards':len(s.CARDS),'checks':checks},ensure_ascii=False,indent=2))
-# 全部 35 张卡逐项验证战内攻击/有效生命/回合射程，而非只验证可执行。
+# 全部 50 张卡逐项验证战内攻击/有效生命/回合射程，而非只验证可执行。
 for c in s.CARDS:
     for rnd in [1,5]:
         stats={'A':{'out':1,'in':1}}
