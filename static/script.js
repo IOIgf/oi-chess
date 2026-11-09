@@ -896,8 +896,10 @@ function renderBonds(bonds) {
     const next = b.next
       ? `<span class="bond-next">还差 ${b.next - b.count}</span>`
       : '<span class="bond-next bond-max">已满</span>';
+    // 每个档位效果单独成 chip：窄栏里自动换行，激活态由 CSS 高亮，
+    // 避免过去一长串 8px 小字被挤成多行、看不出档位对应关系。
     const eff = b.effects && b.effects.length
-      ? `<div class="bond-eff">${b.effects.map(escapeHtml).join(' · ')}</div>`
+      ? `<div class="bond-eff">${b.effects.map(x => '<span class="bond-eff-chip">' + escapeHtml(x) + '</span>').join('')}</div>`
       : '<div class="bond-eff bond-none">未激活</div>';
     const dots = Array.from({ length: 3 }, (_, i) =>
       `<span class="bond-dot${i < b.tier ? ' on' : ''}"></span>`).join('');
