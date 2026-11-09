@@ -36,7 +36,7 @@ TIMEOUT_ENV = 'OI_CHESS_UPDATE_TIMEOUT'
 PROXY_ENV = 'OI_CHESS_PROXY'
 DEFAULT_TIMEOUT = 2.5
 # index.html 缺失时的兜底值；发布新版本时必须与 index.html 的 meta 一起更新。
-FALLBACK_TAG = 'v1.7.6-console-utf8'
+FALLBACK_TAG = 'v1.7.7-stdout-flush'
 # 这些取值（忽略大小写）表示「直连，不走代理」。
 PROXY_OFF = ('', '0', 'no', 'none', 'direct', 'off')
 # check(proxy=...) 的哨兵：None 表示显式直连，_ENV 表示读环境变量。
@@ -140,20 +140,39 @@ def check(root=R, timeout=None, fetch=None, proxy=_ENV):
         return {'status': 'offline', 'local': local, 'proxy': proxy}
 
 
+def _flush_quietly():
+    """清空标准流缓冲并吞掉异常。
+
+    解释器退出时会自动 flush stdout/stderr；若缓冲区里还有中文输出而底层
+    句柄已被宿主 / 管道提前关闭，会打印
+    'Exception ignored in: <_io.TextIOWrapper ...>'，窗口看起来像卡住。
+    提前把缓冲清空，退出期的自动 flush 就无事可做。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.flush()
+        except Exception:
+            pass
+
+
 def _safe_print(*args, **kwargs):
-    """中文输出绝不中断启动：编码失败时降级成 ASCII 转义文本，再失败则静默。
+    """中文输出绝不中断启动：编码失败降级成 ASCII 转义文本，且立即 flush。
 
     非中文代码页的 Windows 控制台（cp1252 / cp437）可能无法编码中文；
-    本脚本的设计契约是「退出码恒为 0，绝不阻塞启动」，因此输出必须自兜底。
+    若输出只留在缓冲区，解释器退出时的自动 flush 还会在 stdout 句柄被
+    宿主关闭时抛 'Exception ignored in: <_io.TextIOWrapper ...>'。
+    本脚本契约是「退出码恒为 0，绝不阻塞启动」，两层都必须兜住。
     """
     try:
         print(*args, **kwargs)
+        _flush_quietly()
         return
     except (UnicodeEncodeError, OSError, ValueError):
         pass
     try:
         text = kwargs.get('sep', ' ').join(str(a) for a in args)
         print(text.encode('ascii', 'backslashreplace').decode('ascii'))
+        _flush_quietly()
     except Exception:
         pass
 
@@ -167,7 +186,7 @@ def main(argv=None):
         proxy = argv[i + 1] if i + 1 < len(argv) else None
     result = check(proxy=proxy)
     if '--json' in argv:
-        print(json.dumps(result, ensure_ascii=True))
+        _safe_print(json.dumps(result, ensure_ascii=True))
         return 0
     for _stream in (sys.stdout, sys.stderr):
         try:
@@ -200,4 +219,8 @@ def main(argv=None):
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    try:
+        _rc = main()
+    finally:
+        _flush_quietly()
+    sys.exit(_rc)

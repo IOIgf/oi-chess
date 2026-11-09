@@ -2,7 +2,9 @@
 
 **当前界面版本：ui-polish-1。** 本轮做了**整体视觉精修与信息可读性**优化：页面底与面板表面分层、纯黑细线改为柔和边框、面板/卡片/按钮加圆角与轻阴影、悬停与焦点反馈、棋盘网格线单独提对比、状态栏与卡面关键字号整体上调一档、羁绊档位效果改为独立 chip 分组并高亮激活态；浅色与深色主题同步适配。背景格线、点击格与棋子仍统一为 CSS Grid（详见 `docs/放置错位修复.md`），布局结构与棋盘对齐逻辑未改，8 视口 × 3 阶段布局回归与放置命中误差仍为 0。此前已修复半屏布局遮挡与商店卡片显示不全，并把卡牌从 35 张扩到 **50 张**、加入 6 种全新战斗机制与商店升星保底，以及启动前检查更新（**代理可选**：首次启动 `start.bat` 会询问一次直连还是走代理，选择保存在本地 `update_config.bat`，运行 `start.bat setup` 可重新选择；也可用环境变量 `OI_CHESS_PROXY=http://127.0.0.1:7890` 指定）。此前还新增了**技能去重与全局羁绊**：50 张卡改为 **50 种互不重复的技能**，新增按流派 2/4/6 档的**羁绊机制**，场上棋子上限从 15 提到 **20**；以及**准备期无倒计时**（全员点「准备」后立即开战）与**羁绊开战视觉反馈**。CSS 与 JS 缓存版本均已同步为 `ui-polish-1`，更新后浏览器请按 Ctrl+F5 强制刷新。
 
-本轮（**v1.7.6-console-utf8**）修复 **Windows 启动崩溃**：部分非中文代码页的机器上，`chcp 65001` 后 `check_update.py` 与 `server.py` 的中文启动输出会抛 `UnicodeEncodeError`，导致检查更新非零退出、服务器根本起不来（选代理后直接回车尤其容易触发）。现在 `start.bat` 钉住 `PYTHONIOENCODING=utf-8:replace`，两个脚本对 stdout/stderr 统一 `reconfigure(utf-8, replace)` 并捕获全部异常，启动期输出全部走 `_safe_print()`——编码失败时自动降级为 `\uXXXX` 纯 ASCII 转义文本，绝不中断启动。新增 `tests/test_console_encoding.py` 用 cp1252 严格编码 + `reconfigure` 失效环境复现并守住该场景。游戏机制、卡牌数值与界面均未改动。
+本轮（**v1.7.7-stdout-flush**）修掉启动窗口停在 `Exception ignored in: <_io.TextIOWrapper name='<stdout>' ...>` 的问题。这是解释器退出期自动 flush stdout 失败：缓冲区里还有中文输出，底层句柄却已被宿主/管道提前关闭，异常被 Python 忽略但窗口看起来像卡死。现在启动期每次输出都立即 flush，进程退出前再统一 flush 并吞异常，缓冲区始终为空。同时移除 `start.bat` 的 `chcp 65001` 与 `server.py` 的 `SetConsoleOutputCP(65001)`——Python 3.6+ 在 Windows 控制台通过 Unicode API 输出中文，与代码页无关，强切 65001 反而是这类控制台 IO 异常的来源；`PYTHONIOENCODING=utf-8:replace` 与 `_safe_print()` 继续为重定向和非中文代码页兜底。新增子进程回归，断言 stdout 句柄提前关闭时退出阶段不再产生该警告。
+
+此前一轮（**v1.7.6-console-utf8**）修复 **Windows 启动崩溃**：部分非中文代码页的机器上，`chcp 65001` 后 `check_update.py` 与 `server.py` 的中文启动输出会抛 `UnicodeEncodeError`，导致检查更新非零退出、服务器根本起不来（选代理后直接回车尤其容易触发）。现在 `start.bat` 钉住 `PYTHONIOENCODING=utf-8:replace`，两个脚本对 stdout/stderr 统一 `reconfigure(utf-8, replace)` 并捕获全部异常，启动期输出全部走 `_safe_print()`——编码失败时自动降级为 `\uXXXX` 纯 ASCII 转义文本，绝不中断启动。新增 `tests/test_console_encoding.py` 用 cp1252 严格编码 + `reconfigure` 失效环境复现并守住该场景。游戏机制、卡牌数值与界面均未改动。
 
 上一轮（**v1.7.5-maintainability**）是**项目治理与可维护性**更新，不涉及游戏机制与界面：新增 MIT `LICENSE` 与 GitHub Actions CI；`server.py` 改为 UTF-8 可读源码（4491 处 `\uXXXX` 反转义）、端口支持 `--port` / `OI_CHESS_PORT` 覆盖、三个巨型函数拆为分派表与 helper；删除工作区里的历史后端 `audit/before/`，改用只读数据快照；修正文档断言数与「仅标准库」表述，并写明可信局域网安全边界。改动前后 1150 场对局逐字段对比完全一致，59,200 场全池实战已按当前源码重跑。界面版本与 CSS/JS 缓存版本仍为 `ui-polish-1`，详见 `运行与验证.md`。
 
@@ -28,7 +30,7 @@ python server.py
 
 > **安全边界**：服务端监听 `0.0.0.0`，当前身份模型是客户端自报 `clientId`，没有身份鉴权、CSRF 防护与频率限制，且允许跨域。**仅可在可信局域网内开黑使用，不要直接暴露到公网**；如需公网访问，必须置于带 TLS 与认证的反向代理之后。
 
-**源码与编码：** `server.py` 使用 UTF-8 保存中文源码，入口会 reconfigure 标准输出；Windows 启动器先执行 `chcp 65001` 切换控制台代码页，Windows / Linux 均正常显示中文。平衡调整前的旧后端已移入 git history，工作区只保留 `audit/baseline/cards_before.json` 这份数据快照，不再有可误运行的旧源码。
+**源码与编码：** `server.py` 使用 UTF-8 保存中文源码，入口会 reconfigure 标准输出；Windows 启动器只设置 `PYTHONIOENCODING=utf-8:replace` 供重定向场景兜底；控制台由 Python 通过 Unicode API 直接输出中文，不再切换代码页，Windows / Linux 均正常显示中文。平衡调整前的旧后端已移入 git history，工作区只保留 `audit/baseline/cards_before.json` 这份数据快照，不再有可误运行的旧源码。
 
 ## 当前版本关键数值
 

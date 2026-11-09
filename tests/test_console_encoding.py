@@ -88,7 +88,27 @@ ok("['index.html']" in out2, 'server multi-arg output is preserved')
 bat = (R / 'start.bat').read_bytes()
 ok(bat.isascii(), 'start.bat stays ASCII-only')
 ok(b'PYTHONIOENCODING=utf-8:replace' in bat, 'start.bat pins UTF-8 for child processes')
-ok(b'chcp 65001' in bat, 'start.bat still sets console code page')
+ok(b'chcp 65001' not in bat, 'start.bat no longer forces code page 65001')
+ok(hasattr(u, '_flush_quietly') and hasattr(s, '_flush_quietly'),
+   'both modules define _flush_quietly')
+
+# 6) 解释器退出期 flush：stdout 句柄提前关闭时不得出现 'Exception ignored in'
+import subprocess
+_bare = 'import sys, os\nprint("\u4e2d\u6587")\nos.close(1)\n'
+_p0 = subprocess.run([sys.executable, '-c', _bare], capture_output=True)
+ok(b'Exception ignored in' in _p0.stderr,
+   'control: bare print does reproduce the exit-time flush warning')
+_guarded = (
+    'import sys, os\n'
+    'sys.path.insert(0, %r)\n'
+    'import check_update as u\n'
+    'u._safe_print("\u5df2\u52a0\u8f7d 3 \u540d\u73a9\u5bb6\u6863\u6848")\n'
+    'os.close(1)\n'
+) % str(R)
+_p1 = subprocess.run([sys.executable, '-c', _guarded], capture_output=True)
+ok(b'Exception ignored in' not in _p1.stderr,
+   'guarded output produces no exit-time flush warning')
+ok(_p1.returncode == 0, 'guarded process still exits 0')
 
 # 5) 标准流 reconfigure 的兜底必须捕获全部异常（源码级）
 src_u = (R / 'check_update.py').read_text('utf-8')

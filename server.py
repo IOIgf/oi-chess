@@ -2571,36 +2571,53 @@ def get_local_ip():
         return '127.0.0.1'
 
 
-def _safe_print(*args, **kwargs):
-    """启动期中文输出绝不中断进程：编码失败时降级成 ASCII 转义文本。
+def _flush_quietly():
+    """清空标准流缓冲并吞掉异常。
 
-    Windows 非中文代码页（cp1252 / cp437）或标准流被宿主替换时，
-    reconfigure 可能失效，此时直接 print 中文会抛 UnicodeEncodeError，
-    导致服务器根本起不来。
+    解释器退出时会自动 flush stdout/stderr；若缓冲区里还有中文输出而底层
+    句柄已被宿主 / 管道提前关闭，会打印
+    'Exception ignored in: <_io.TextIOWrapper ...>'，窗口看起来像卡住。
+    提前把缓冲清空，退出期的自动 flush 就无事可做。
+    """
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.flush()
+        except Exception:
+            pass
+
+
+def _safe_print(*args, **kwargs):
+    """启动期输出：编码失败降级成 ASCII 转义文本，且立即 flush。
+
+    Windows 非中文代码页或标准流被宿主替换时，直接 print 中文会抛
+    UnicodeEncodeError；若输出只留在缓冲区，解释器退出时还会在 stdout
+    句柄失效后抛 'Exception ignored in' 并让窗口看起来卡住。两层都兜住。
     """
     try:
         print(*args, **kwargs)
+        _flush_quietly()
         return
     except (UnicodeEncodeError, OSError, ValueError):
         pass
     try:
         text = kwargs.get('sep', ' ').join(str(a) for a in args)
         print(text.encode('ascii', 'backslashreplace').decode('ascii'))
+        _flush_quietly()
     except Exception:
         pass
 
 
 def _setup_utf8_console():
-    """Windows 控制台默认使用本地代码页；显式切到 UTF-8 才能正确显示中文。"""
+    """仅统一标准流编码，不改控制台代码页。
+
+    Python 3.6+ 在 Windows 控制台通过 WriteConsoleW 直接写 Unicode，
+    与代码页无关，中文无需 chcp 65001 即可显示；强切 65001 反而会带来
+    控制台 IO 异常与退出期 flush 挂起。重定向到文件/管道时，
+    reconfigure 保证中文以 UTF-8 写出。
+    """
     for stream in (sys.stdout, sys.stderr):
         try:
             stream.reconfigure(encoding='utf-8', errors='replace')
-        except Exception:
-            pass
-    if sys.platform == 'win32':
-        try:
-            import ctypes
-            ctypes.windll.kernel32.SetConsoleOutputCP(65001)
         except Exception:
             pass
 
@@ -2658,4 +2675,8 @@ def main():
 
 
 if __name__ == '__main__':
-    sys.exit(main())
+    try:
+        _rc = main()
+    finally:
+        _flush_quietly()
+    sys.exit(_rc)
