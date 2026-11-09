@@ -88,6 +88,21 @@ body {
   color: var(--fg); font-size: 14px; font-family: inherit; outline: none; letter-spacing: 2px;
 }
 .input-group input:focus { background: var(--panel); }
+/* 启动前检查更新的提示条：默认隐藏，只在发现新 Release 时插入主菜单。 */
+.update-banner {
+  position: relative; margin: 0 0 18px; padding: 9px 30px 9px 10px;
+  border: 1px solid var(--heal-color); border-radius: 6px;
+  background: var(--panel); color: var(--fg);
+  font-size: 11px; line-height: 1.6; text-align: left; letter-spacing: 0;
+}
+.update-banner b { color: var(--heal-color); }
+.update-banner .update-links { display: flex; gap: 12px; margin-top: 4px; }
+.update-banner a { color: var(--heal-color); text-decoration: underline; }
+.update-banner button {
+  position: absolute; top: 4px; right: 6px;
+  border: 0; background: transparent; color: var(--muted);
+  font-size: 15px; cursor: pointer; font-family: inherit; line-height: 1;
+}
 
 .room-list { margin-top: 20px; text-align: left; border: 1px solid var(--line); max-height: 240px; overflow: auto; }
 .room-item {

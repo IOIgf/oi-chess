@@ -4,7 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>OI-chess</title>
-<link rel="stylesheet" href="/static/style.css?v=cards-50-1">
+<meta name="oi-chess-release" content="v1.6.1-update-check">
+<link rel="stylesheet" href="/static/style.css?v=update-check-1">
 </head>
 <body>
 
@@ -14,6 +15,7 @@
   <div class="menu-content">
     <h1 class="logo">OI-chess</h1>
     <p class="subtitle">运气 · 博弈 · 算法</p>
+    <div id="updateBanner" class="update-banner hidden" role="status"></div>
 
     <div class="profile-bar">
       <span class="profile-label">RATING</span>
@@ -101,7 +103,7 @@
       </div>
 
       <div class="opponents" id="opponents"></div>
-      <small id="uiBuild" style="font-size:9px;color:var(--muted)">界面版本 cards-50-1</small>
+      <small id="uiBuild" style="font-size:9px;color:var(--muted)">界面版本 update-check-1</small>
     </aside>
 
     <!-- ========== 棋盘 ========== -->
@@ -283,6 +285,6 @@
   </div>
 </div>
 
-<script src="/static/script.js?v=cards-50-1"></script>
+<script src="/static/script.js?v=update-check-1"></script>
 </body>
 </html>

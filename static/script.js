@@ -1516,6 +1516,64 @@ async function checkRejoinButton() {
   }
 }
 
+// ============================================================
+// 启动前检查更新（静默：离线 / 超时 / 限流都不影响进入游戏）
+// 本地版本取自 index.html 的 <meta name="oi-chess-release">，
+// 与 check_update.py、版本清单.json 共用同一个真相源。
+// ============================================================
+const UPDATE_API = 'https://api.github.com/repos/IOIgf/oi-chess/releases/latest';
+
+function versionKey(tag) {
+  const m = /^v?(\d+)\.(\d+)\.(\d+)/.exec(tag || '');
+  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : [0, 0, 0];
+}
+function releaseIsNewer(local, remote) {
+  const a = versionKey(local), b = versionKey(remote);
+  for (let i = 0; i < 3; i++) { if (b[i] !== a[i]) return b[i] > a[i]; }
+  return false;
+}
+async function checkUpdate() {
+  const meta = document.querySelector('meta[name="oi-chess-release"]');
+  const local = meta ? meta.content : '';
+  // 离线预览页只注入 body，不含该 meta：直接跳过，不发网络请求。
+  if (!local) return;
+  try {
+    if (sessionStorage.getItem('oiUpdateChecked')) return;
+    sessionStorage.setItem('oiUpdateChecked', '1');
+  } catch (e) { /* 隐私模式下 storage 不可用时仍检查一次 */ }
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 4000);
+  try {
+    const res = await fetch(UPDATE_API, {
+      signal: ctrl.signal, headers: { Accept: 'application/vnd.github+json' }
+    });
+    if (!res.ok) return;
+    const d = await res.json();
+    if (!d || !d.tag_name || !releaseIsNewer(local, d.tag_name)) return;
+    const assets = Array.isArray(d.assets) ? d.assets : [];
+    const dl = (assets[0] && assets[0].browser_download_url) || d.html_url;
+    const banner = document.getElementById('updateBanner');
+    if (!banner) return;
+    banner.innerHTML =
+      '发现新版本 <b>' + escapeHtml(d.tag_name) + '</b>（当前 ' + escapeHtml(local) + '）'
+      + '<div class="update-links">'
+      + (d.html_url ? '<a href="' + escapeHtml(d.html_url) + '" target="_blank" rel="noopener">查看更新</a>' : '')
+      + (dl ? '<a href="' + escapeHtml(dl) + '" target="_blank" rel="noopener">下载</a>' : '')
+      + '</div>'
+      + '<button type="button" aria-label="关闭" onclick="dismissUpdate()">×</button>';
+    banner.classList.remove('hidden');
+  } catch (e) {
+    // 静默跳过：检查更新绝不能阻塞游戏
+  } finally {
+    clearTimeout(timer);
+  }
+}
+function dismissUpdate() {
+  const b = document.getElementById('updateBanner');
+  if (b) b.classList.add('hidden');
+}
+checkUpdate();
+
 (async function boot() {
   loadIdentity();
   await Promise.all([loadProfile(), loadCards()]);

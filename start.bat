@@ -2,6 +2,7 @@
 cd /d "%~dp0"
 where py >nul 2>nul
 if not errorlevel 1 (
+  py -3 check_update.py
   py -3 server.py
 ) else (
   python -c "import sys; sys.exit(0 if sys.version_info.major == 3 else 1)"
@@ -10,6 +11,7 @@ if not errorlevel 1 (
     pause
     exit /b 1
   )
+  python check_update.py
   python server.py
 )
 pause

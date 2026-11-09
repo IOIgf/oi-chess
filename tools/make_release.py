@@ -16,6 +16,12 @@ def _contracts(f):
 _rm,_rp=_contracts('README.md'),_contracts('完整检查与平衡报告.md')
 assert _rm and _rp and _rm==_rp,(
     'mechanics contract count disagrees between README.md and 完整检查与平衡报告.md')
+# Local release version is single-sourced in index.html; the launcher, browser
+# check and this manifest all read the same value.
+_tagm=re.search(r'<meta\s+name="oi-chess-release"\s+content="([^"]+)"',
+                (R/'static'/'index.html').read_text('utf-8'))
+assert _tagm,'static/index.html missing oi-chess-release meta'
+RELEASE_TAG=_tagm.group(1)
 files=[]
 for p in R.rglob('*'):
     if not p.is_file():continue
@@ -27,7 +33,7 @@ for p in R.rglob('*'):
     if rel.parts[:2]==('audit','fx') and p.suffix=='.png':continue
     if rel.parts[:2]==('audit','placement') and p.suffix=='.png':continue
     files.append(p)
-manifest={'release':'最新版（新增 15 张算法卡与 6 种战斗机制 + 商店升星保底 + 按等级解锁卡池 + 状态轮询瘦响应 + 半屏布局遮挡修复 + 可复现性校验 + Windows 编码修复）','build':'cards-50-1','entrypoint':'start.bat / py -3 server.py','server_ascii_only':(R/'server.py').read_bytes().isascii(),'current_cards':{'o2':{'attack':0,'hp':280,'cost':3,'aura_speed_multiplier':2},'spfa':{'attack':120,'hp':1000,'cost':3}},'files':{p.relative_to(R).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)}}
+manifest={'release':'最新版（新增 15 张算法卡与 6 种战斗机制 + 启动前检查更新 + 商店升星保底 + 按等级解锁卡池 + 状态轮询瘦响应 + 半屏布局遮挡修复 + 可复现性校验 + Windows 编码修复）','build':'update-check-1','release_tag':RELEASE_TAG,'entrypoint':'start.bat（启动前检查更新）/ py -3 server.py','server_ascii_only':(R/'server.py').read_bytes().isascii(),'current_cards':{'o2':{'attack':0,'hp':280,'cost':3,'aura_speed_multiplier':2},'spfa':{'attack':120,'hp':1000,'cost':3}},'files':{p.relative_to(R).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)}}
 (R/'版本清单.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2));files.append(R/'版本清单.json')
 with zipfile.ZipFile(DEST,'w',zipfile.ZIP_DEFLATED) as z:
     z.writestr('oi-chess/data/','')
@@ -41,5 +47,11 @@ with tempfile.TemporaryDirectory() as tmp:
     mod=types.ModuleType('release_check');mod.__file__=str(root/'server.py');exec(compile(b,'server.py','exec'),mod.__dict__)
     assert len(mod.CARDS)==50 and mod.CARD_BY_ID['o2']['hp']==280 and mod.CARD_BY_ID['spfa']['hp']==1000
     assert (root/'static/script.js').exists() and (root/'start.bat').read_bytes().isascii()
+    _cu=root/'check_update.py';assert _cu.exists(),'check_update.py missing from release'
+    _cus=_cu.read_text('utf-8');assert 'urllib.request' in _cus and 'import requests' not in _cus
+    _sb=(root/'start.bat').read_bytes().decode('ascii')
+    assert _sb.index('check_update.py')<_sb.index('server.py'),'start.bat must check updates before launching'
+    _im=re.search(r'<meta\s+name="oi-chess-release"\s+content="([^"]+)"',(root/'static'/'index.html').read_text('utf-8'))
+    assert _im and m['release_tag']==_im.group(1),'release_tag disagrees with index.html'
     assert not list((root/'data').iterdir())
 print('PASS release checks:',DEST,len(files),'files',round(DEST.stat().st_size/1024),'KiB')
