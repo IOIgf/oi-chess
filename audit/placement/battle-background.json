@@ -1,22 +1,22 @@
 [
   {
     "case": "initial battle",
-    "max_error_px": 0.00020647617975555477
+    "max_error_px": 0
   },
   {
     "case": "battle 1000x700",
-    "max_error_px": 0.00010501033261789416
+    "max_error_px": 0
   },
   {
     "case": "battle 390x844",
-    "max_error_px": 0.00031294691552830045
+    "max_error_px": 0
   },
   {
     "case": "battle 844x390",
-    "max_error_px": 2.2288619334176474e-05
+    "max_error_px": 0
   },
   {
     "case": "battle 1440x960",
-    "max_error_px": 0.00010177576541536837
+    "max_error_px": 0
   }
 ]

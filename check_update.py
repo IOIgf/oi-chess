@@ -31,7 +31,7 @@ SKIP_ENV = 'OI_CHESS_SKIP_UPDATE'
 TIMEOUT_ENV = 'OI_CHESS_UPDATE_TIMEOUT'
 DEFAULT_TIMEOUT = 2.5
 # index.html 缺失时的兜底值；发布新版本时必须与 index.html 的 meta 一起更新。
-FALLBACK_TAG = 'v1.6.1-update-check'
+FALLBACK_TAG = 'v1.7.0-bonds-skills'
 
 META_RE = re.compile(r'<meta\s+name="oi-chess-release"\s+content="([^"]+)"')
 
@@ -49,7 +49,7 @@ def local_tag(root=R):
 
 
 def version_key(tag):
-    """v1.6.1-update-check -> (1, 6, 1)；只比较前三段数字，忽略构建后缀。"""
+    """v1.7.0-bonds-skills -> (1, 7, 0)；只比较前三段数字，忽略构建后缀。"""
     m = re.match(r'v?(\d+)\.(\d+)\.(\d+)', tag or '')
     return tuple(int(x) for x in m.groups()) if m else (0, 0, 0)
 

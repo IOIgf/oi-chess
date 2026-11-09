@@ -30,14 +30,14 @@ for cid in ['greedy','a_star','monotonic_queue','xor']:
     u=unit(cid);near=unit(owner='B',y=3);far=unit(owner='B',x=7,y=0,hp=1);far['atk']=999
     ok(r._pick_target(u,[far,near]) is near,cid+' range-priority target')
 # 被动倍率与叠层节奏。
-for cid,expected in [('spfa',1.2),('expectation',1.25),('prime_sieve',1.8),('fermat',1.8),('cdq',.6),('matrix_pow',1),('genetic',1)]:
+for cid,expected in [('spfa',1.2),('expectation',1.25),('prime_sieve',1.8),('fermat',1.3),('cdq',.6),('matrix_pow',1),('genetic',1)]:
     u=unit(cid);e=unit(owner='B');v=r._attack_multiplier(u,e,[u,e],0,3)
     ok(abs(v-40*expected)<1e-8,cid+' damage multiplier')
-for cid,n,mult in [('monotonic_stack',4,3),('segment_tree',4,3),('mod_op',3,2.5)]:
+for cid,n,mult in [('monotonic_stack',4,3),('mod_op',3,2.5)]:
     u=unit(cid);e=unit(owner='B');v=[r._attack_multiplier(u,e,[u,e],0,3)/40 for _ in range(n)]
     ok(v==[1]*(n-1)+[mult],cid+' burst cadence')
 u=unit('cdq');e=unit(owner='B');ok(r._attack_multiplier(u,e,[u,e],10,3)==72,'CDQ exact 10s threshold')
-u=unit('matrix_pow');ok(abs(r._attack_multiplier(u,e,[u,e],18,3)-40*1.2**3)<1e-8,'matrix max growth')
+u=unit('matrix_pow');ok(abs(r._attack_multiplier(u,e,[u,e],18,3)-40*s.MATRIX_STEP**s.MATRIX_CAP)<1e-8,'matrix max growth')
 u=unit('genetic');u['kills']=3;ok(r._attack_multiplier(u,e,[u,e],0,3)==58,'genetic max growth')
 # 射程裁剪：全场 BFS 是唯一例外。
 for cid in ['xor','quick_sort','bidirectional','sweep_line','diff','linear_dp','range_dp','sqrt_block','divide','bitmask_dp','sort']:
@@ -130,5 +130,24 @@ ok(all(e['t']==0 for e in ev),'DFS immediate damage and event time agree')
 for raw,inc in [(40,1),(40,1.1),(40.9,1),(1.1,.5)]:
     a=unit();a['inMult']=inc;ev=[];d=r._deal_damage(a,raw,ev,0,[a],{},allow_react=False)
     ok(d==max(1,int(raw*inc)),'global damage floor '+str((raw,inc)))
+# ---- 本轮大更新：50 张卡 50 个唯一技能 / 上限 20 / 全局羁绊 ---------------
+skills=[c['skill'] for c in s.CARDS]
+ok(len(skills)==len(set(skills))==50,'every one of the 50 cards has a distinct skill')
+ok(s.MAX_BOARD==20 and s.MAX_BENCH==10,'board cap raised to 20, bench stays 10')
+ok(tuple(s.BOND_TIERS)==(2,4,6),'bond thresholds are 2 / 4 / 6')
+ok([s.bond_tier(n) for n in (1,2,3,4,5,6,7)]==[0,1,1,2,2,3,3],'bond_tier boundary values')
+st=s.bond_status([s.CARD_BY_ID[x] for x in ['greedy','sort','two_pointers']])
+ok(st[0]['count']==3 and st[0]['tier']==1 and st[0]['next']==4,'bond_status reports count/tier/next')
+ok(st[0]['effects']==[s.BOND_EFFECTS[0]],'tier 1 grants exactly one effect')
+a,b=unit('greedy'),unit('sort',x=2,y=4);en=unit('two_pointers',owner='B',x=3,y=1)
+r._apply_spawn_passives([a,b,en])
+ok(abs(a['atk']-120*(1+s.BOND_ATK_STEP))<1e-8,'two same-trait allies trigger the tier-1 attack bond')
+ok(abs(en['atk']-120)<1e-8,'enemy units never count toward your bond')
+grp=[unit('greedy',x=i,y=1) for i in range(6)]
+r._apply_spawn_passives(grp)
+ok(all(abs(u['atk']-120*(1+s.BOND_ATK_STEP))<1e-8 for u in grp),'six same-trait units reach tier 3')
+ok(all(abs(u['inMult']-(1-s.BOND_GUARD_STEP))<1e-8 for u in grp),'tier 3 reduces damage taken')
+ok(all(abs(u['maxHp']-int(6000*(1+s.BOND_HP_STEP)))<1e-8 for u in grp),'tier 2+ raises max HP by an integer amount')
+ok(all(u['hp']<=u['maxHp'] and u['hp']==int(u['hp']) for u in grp),'bond HP stays integral so no living unit shows 0 HP')
 print('PASS complete mechanics audit:',len(checks),'checks')
 Path(__file__).with_name('mechanics_audit_results.json').write_text(json.dumps({'passed':len(checks),'cards':len(s.CARDS),'checks':checks},ensure_ascii=False,indent=2))

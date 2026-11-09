@@ -33,7 +33,7 @@ for p in R.rglob('*'):
     if rel.parts[:2]==('audit','fx') and p.suffix=='.png':continue
     if rel.parts[:2]==('audit','placement') and p.suffix=='.png':continue
     files.append(p)
-manifest={'release':'最新版（新增 15 张算法卡与 6 种战斗机制 + 启动前检查更新 + 商店升星保底 + 按等级解锁卡池 + 状态轮询瘦响应 + 半屏布局遮挡修复 + 可复现性校验 + Windows 编码修复）','build':'update-check-1','release_tag':RELEASE_TAG,'entrypoint':'start.bat（启动前检查更新）/ py -3 server.py','server_ascii_only':(R/'server.py').read_bytes().isascii(),'current_cards':{'o2':{'attack':0,'hp':280,'cost':3,'aura_speed_multiplier':2},'spfa':{'attack':120,'hp':1000,'cost':3}},'files':{p.relative_to(R).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)}}
+manifest={'release':'最新版（50 张卡 = 50 种独立技能 + 全局羁绊机制 + 场上上限 20 + 负面技能平衡 + 启动前检查更新 + 商店升星保底 + 按等级解锁卡池 + 状态轮询瘦响应 + 半屏布局遮挡修复 + 可复现性校验 + Windows 编码修复）','build':'bonds-1','release_tag':RELEASE_TAG,'entrypoint':'start.bat（启动前检查更新）/ py -3 server.py','server_ascii_only':(R/'server.py').read_bytes().isascii(),'current_cards':{'o2':{'attack':0,'hp':280,'cost':3,'aura_speed_multiplier':2},'spfa':{'attack':120,'hp':1000,'cost':3}},'files':{p.relative_to(R).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)}}
 (R/'版本清单.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2));files.append(R/'版本清单.json')
 with zipfile.ZipFile(DEST,'w',zipfile.ZIP_DEFLATED) as z:
     z.writestr('oi-chess/data/','')
@@ -46,6 +46,11 @@ with tempfile.TemporaryDirectory() as tmp:
     b=(root/'server.py').read_bytes();assert b.isascii();compile(b,'server.py','exec')
     mod=types.ModuleType('release_check');mod.__file__=str(root/'server.py');exec(compile(b,'server.py','exec'),mod.__dict__)
     assert len(mod.CARDS)==50 and mod.CARD_BY_ID['o2']['hp']==280 and mod.CARD_BY_ID['spfa']['hp']==1000
+    # 50 张卡必须 50 种互不重复的技能，羁绊与上场上限也要与文档一致
+    assert len({c['skill'] for c in mod.CARDS})==50,('cards must carry 50 distinct skills')
+    assert mod.MAX_BOARD==20 and mod.MAX_BENCH==10,('board cap must be 20, bench cap 10')
+    assert tuple(mod.BOND_TIERS)==(2,4,6) and len(mod.BOND_EFFECTS)==3,('bond tiers must be 2/4/6')
+    assert not any(c['skill']=='synergy' for c in mod.CARDS),('card-only synergy must be gone')
     assert (root/'static/script.js').exists() and (root/'start.bat').read_bytes().isascii()
     _cu=root/'check_update.py';assert _cu.exists(),'check_update.py missing from release'
     _cus=_cu.read_text('utf-8');assert 'urllib.request' in _cus and 'import requests' not in _cus

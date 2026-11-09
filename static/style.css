@@ -198,6 +198,32 @@ body {
 .opp.dead span:first-child { text-decoration: line-through; }
 .opp-tag { font-size: 8px; color: var(--muted); letter-spacing: 1px; }
 
+/* ---------- 羁绊面板：同流派 2/4/6 档自动激活 ---------- */
+.bonds {
+  padding-top: 10px; border-top: 1px solid var(--line);
+  font-size: 10px; letter-spacing: 1px;
+  flex: 0 1 auto; min-height: 0; overflow-y: auto;
+}
+.bonds-title { color: var(--muted); font-size: 9px; margin-bottom: 6px; }
+.bond {
+  display: grid; grid-template-columns: 1fr auto auto;
+  grid-template-areas: "name count next" "dots dots dots" "eff eff eff";
+  gap: 2px 4px; padding: 4px 0;
+  border-bottom: 1px dotted var(--line); align-items: center;
+}
+.bond:last-child { border-bottom: none; }
+.bond-name { grid-area: name; }
+.bond.on .bond-name { font-weight: 700; }
+.bond-count { grid-area: count; font-variant-numeric: tabular-nums; }
+.bond-next { grid-area: next; font-size: 8px; color: var(--muted); }
+.bond-max { opacity: 0.6; }
+.bond-dots { grid-area: dots; display: flex; gap: 3px; }
+.bond-dot { width: 5px; height: 5px; border-radius: 50%; border: 1px solid var(--line); }
+.bond-dot.on { background: var(--fg); border-color: var(--fg); }
+.bond-eff { grid-area: eff; font-size: 8px; color: var(--muted); }
+.bond.on .bond-eff { color: var(--fg); }
+.bond-none { opacity: 0.45; }
+
 .board-wrap {
   width: 100%; height: 100%; min-width: 0; min-height: 0;
   display: flex; align-items: center; justify-content: center;
@@ -379,9 +405,17 @@ body {
 .modal-body li { margin-bottom: 4px; }
 .modal-body b { font-weight: 700; }
 .codex-list { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.codex-note {
+  grid-column: 1 / -1; font-size: 10px; line-height: 1.6;
+  color: var(--muted); padding: 6px 0; border-bottom: 1px solid var(--line);
+}
+.codex-note b { color: var(--fg); }
 .codex-card { border: 1px solid var(--line); padding: 10px; display: flex; flex-direction: column; gap: 4px; font-size: 10px; }
 .codex-card .cc-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; font-weight: 700; }
 .codex-card .cc-meta { color: var(--muted); font-size: 9px; }
+.codex-card .cc-skill { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; }
+.codex-card .cc-skill-name { font-size: 10px; font-weight: 700; }
+.codex-card .cc-skill-id { font-size: 8px; color: var(--muted); font-family: ui-monospace, Menlo, Consolas, monospace; }
 .codex-card .cc-stats { font-size: 9px; color: var(--muted); font-variant-numeric: tabular-nums; }
 .codex-card .cc-flavor {
   font-size: 10px; line-height: 1.4; margin-top: 4px;
@@ -437,6 +471,7 @@ body {
     flex-shrink: 0; white-space: nowrap;
   }
   .opponents { display: none; }
+  .bonds { display: none; }
   .panel-shop { flex-direction: row; align-items: stretch; overflow: hidden; padding: 6px 8px; gap: 8px; height: 132px; }
   .shop { flex-direction: row; flex: 1; min-width: 0; gap: 6px; overflow: visible; }
   .shop-header {
@@ -803,6 +838,7 @@ body {
 @media (max-height: 700px) {
   .panel-chat { height: 84px; }
   .game-controls { margin: 6px 8px 0; }
+  .bonds { max-height: 76px; }
 }
 @media (max-height: 560px) {
   .panel-chat { height: 72px; }
@@ -810,6 +846,7 @@ body {
   .card-trait { display: none; }
   .chat-header { padding: 4px 8px; }
   .chat-input-bar { padding: 4px; }
+  .bonds { display: none; }
 }
 /* 固定行高只适用于窄屏的横向商店；宽屏（>1000px）商店是竖向布局，
    压成 96px 会挤爆刷新按钮与备战席，因此必须叠加宽度条件。 */

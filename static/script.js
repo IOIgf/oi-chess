@@ -48,11 +48,33 @@ function toggleFxMode() {
   syncFxMode();
 }
 window.addEventListener('DOMContentLoaded', syncFxMode);
-const SKILL_LABELS = {line:'线性扫描',multi:'连击',aoe:'范围冲击',aoe_debuff:'广搜减速',range_aoe:'区间打击',block_aoe:'分块打击',delayed_line:'延迟标记',swap_stats:'交换攻击',sort_line:'重排站位',compress_line:'同行压缩',pincer:'两端夹击',partition:'高攻分区',divide_conquer:'分治追击',sweep:'扫描递增',freeze:'冻结',pierce:'穿透',splash:'溅射',lifesteal:'汲取',rampage:'背水',synergy:'协同'};
+// 50 张卡 = 50 个唯一技能，标签表覆盖全部技能 id。
+// 主主动技能的飘字用 skillId 查表，被动机制的说明写在卡面 desc 里。
+const SKILL_LABELS = {
+  // 主动技能（server.ACTIVE_SKILLS）
+  aoe: '范围冲击', multi: '连击', line: '线性扫描', aoe_debuff: '广搜减速',
+  range_aoe: '区间打击', block_aoe: '分块打击', delayed_line: '延迟标记',
+  swap_stats: '交换攻守', sort_line: '重排站位', compress_line: '同行压缩',
+  pincer: '两端夹击', partition: '高攻分区', divide_conquer: '分治追击',
+  sweep: '扫描递增', freeze: '冻结', min_cut: '最小割',
+  // 被动机制
+  stack_ally: '叠层援护', charge_burst: '蓄力爆发', finish_weak: '收割弱者',
+  chain_kill: '连锁斩杀', link_ally: '连锁护盾', crowd_crit: '围攻暴击',
+  prime_round: '质数回合', every_n: '模节拍', shift_stats: '移位调参',
+  seg_query: '线段树查询', shield_on_low: '低血护盾', grow_range: '迭代增距',
+  merge_ally: '归并结伴', thorns: '逆元反刺', sliding_max: '滑窗取极',
+  heuristic: '启发选点', mod_cycle: '模周期振荡', expectation: '期望收益',
+  cdq: 'CDQ 分治', spfa_stall: 'SPFA 停滞', o2_aura: 'O2 加速光环',
+  genetic: '遗传突变', matrix_pow: '矩阵幂', pierce: '穿透',
+  prefix_growth: '前缀累涨', lifesteal: '汲取', kmp_next: 'KMP 跃迁',
+  mst_link: '最小生成树链', splash: '溅射', multi_match: '多模式匹配',
+  scc_mark: '强连通标记', rampage: '背水', lcp_chain: '最长公共前缀',
+  splay_rotate: '伸展旋转', fft_butterfly: '蝶形变换', sam_compress: '自动机压缩',
+};
 function effectKind(skill) {
-  if (['aoe_debuff','swap_stats','sort_line'].includes(skill)) return 'control';
+  if (['aoe_debuff','swap_stats','sort_line','freeze'].includes(skill)) return 'control';
   if (skill === 'delayed_line') return 'delay';
-  if (['compress_line','sweep','divide_conquer'].includes(skill)) return 'burst';
+  if (['compress_line','sweep','divide_conquer','min_cut'].includes(skill)) return 'burst';
   if (skill === 'thorns') return 'reflect';
   return 'normal';
 }
@@ -149,7 +171,9 @@ function renderCodex(cards, traits) {
   const el = document.getElementById('codexList');
   const byCost = {};
   cards.forEach(c => { (byCost[c.cost] = byCost[c.cost] || []).push(c); });
-  let html = '';
+  const skillCount = new Set(cards.map(c => c.skill)).size;
+  let html = `<div class="codex-note">共 ${cards.length} 张卡 · ${skillCount} 种技能 ·
+    羁绊：同流派 <b>2 / 4 / 6</b> 张自动激活 —— 攻击 +6% → 生命 +8% → 承伤 -6%</div>`;
   [1, 2, 3, 4, 5].forEach(cost => {
     const list = byCost[cost] || [];
     if (!list.length) return;
@@ -159,6 +183,7 @@ function renderCodex(cards, traits) {
         <div class="codex-card">
           <div class="cc-head"><span>${escapeHtml(c.name)}</span><span>${c.cost} 金</span></div>
           <div class="cc-meta">${escapeHtml(c.difficulty)} · ${escapeHtml(traits[c.trait] || c.trait)} · ${c.active ? `主动 · 每次 ${c.skillCost} 精力` : '被动 · 不耗精力'}</div>
+          <div class="cc-skill"><span class="cc-skill-name">${escapeHtml(SKILL_LABELS[c.skill] || c.skill)}</span><span class="cc-skill-id">${escapeHtml(c.skill)}</span></div>
           <div class="cc-stats">攻击 ${c.attack} · 生命 ${c.maxHp || c.hp} · 射程 ${c.range} · 购买 精力 ${c.energy} / 理智 ${c.reason}</div>
           <div class="cc-role">${escapeHtml(c.role || '')} · ${escapeHtml(c.position || '')}</div><div class="cc-flavor">${escapeHtml(c.flavor || '')}</div>
           <div class="cc-desc">${escapeHtml(c.desc)}</div><div class="cc-tip">${escapeHtml(c.tip || '')}</div>
@@ -837,6 +862,36 @@ function renderLobby(d) {
   }
 }
 
+// 羁绊：按流派统计场上棋子，达到 2/4/6 档自动激活对应增益。
+// 服务端 bond_status 已算好档位与生效效果，前端只负责展示。
+function renderBonds(bonds) {
+  const el = document.getElementById('bondList');
+  if (!el) return;
+  if (!bonds || !bonds.length) {
+    el.classList.add('hidden');
+    el.innerHTML = '';
+    return;
+  }
+  el.classList.remove('hidden');
+  const rows = bonds.map(b => {
+    const active = b.tier > 0;
+    const next = b.next
+      ? `<span class="bond-next">还差 ${b.next - b.count}</span>`
+      : '<span class="bond-next bond-max">已满</span>';
+    const eff = b.effects && b.effects.length
+      ? `<div class="bond-eff">${b.effects.map(escapeHtml).join(' · ')}</div>`
+      : '<div class="bond-eff bond-none">未激活</div>';
+    const dots = Array.from({ length: 3 }, (_, i) =>
+      `<span class="bond-dot${i < b.tier ? ' on' : ''}"></span>`).join('');
+    return `<div class="bond${active ? ' on' : ''}">
+      <span class="bond-name">${escapeHtml(b.name)}</span>
+      <span class="bond-count">${b.count}</span>${next}
+      <span class="bond-dots">${dots}</span>${eff}
+    </div>`;
+  }).join('');
+  el.innerHTML = `<div class="bonds-title">羁绊</div>${rows}`;
+}
+
 function renderGame(d) {
   const me = d.players[d.viewerId];
   if (!me) return;
@@ -862,6 +917,7 @@ function renderGame(d) {
   if (!me.dead && me.crashed) phase += '·崩溃';
   document.getElementById('phaseVal').textContent = phase;
   renderOpponents(d, me);
+  renderBonds(d.bonds);
 
   const byeBadge = document.getElementById('byeBadge');
 

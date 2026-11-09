@@ -12,7 +12,7 @@ DATA_FILE = DATA_DIR / 'players.json'
 
 MAX_PLAYERS = 8
 MAX_BENCH = 10             # \u5907\u6218\u5e2d\u4e0a\u9650
-MAX_BOARD = 15             # \u573a\u4e0a\u68cb\u5b50\u4e0a\u9650
+MAX_BOARD = 20             # \u573a\u4e0a\u68cb\u5b50\u4e0a\u9650
 HALF_W, HALF_H = 8, 4
 BATTLE_W, BATTLE_H = 8, 8
 PREP_TIME = 30.0
@@ -56,8 +56,8 @@ STACK_ALLY_STEP = 0.08
 STACK_ALLY_CAP = 6
 GENETIC_STEP = 0.15
 GENETIC_CAP = 3
-MATRIX_STEP = 1.2
-MATRIX_CAP = 3
+MATRIX_STEP = 1.1
+MATRIX_CAP = 2
 CDQ_SWITCH = 10.0
 CDQ_EARLY = 0.6
 CDQ_LATE = 1.8
@@ -82,6 +82,44 @@ SYNERGY_CAP = 4            # Maximum synergy stacks.
 FREEZE_RATIO = 0.40        # Damage ratio of the freeze active skill.
 FREEZE_STALL = 2.0         # Seconds of attack stall applied by freeze.
 SHOP_PITY_MULT = 4         # Shop weight multiplier for cards one copy from merging.
+
+# ---- Global bonds: 2/4/6 units of one trait unlock one tier each -----------
+BOND_TIERS = (2, 4, 6)
+BOND_ATK_STEP = 0.06       # tier 1: +6% attack for units of that trait
+BOND_HP_STEP = 0.08        # tier 2: +8% max HP
+BOND_GUARD_STEP = 0.06     # tier 3: -6% damage taken
+BOND_EFFECTS = ['\u653b\u51fb +6%', '\u751f\u547d +8%', '\u627f\u4f24 -6%']  # exposed to the client
+
+# ---- Unique skills: one distinct skill id per card -------------------------
+PREFIX_GROWTH_STEP = 0.10
+PREFIX_GROWTH_CAP = 6
+MST_GUARD_STEP = 0.06
+MST_GUARD_CAP = 4
+SCC_MARK_STEP = 0.08
+SCC_MARK_CAP = 3
+FFT_ODD_MULT = 0.75
+FFT_EVEN_MULT = 1.70
+KMP_NEXT_STEP = 0.10
+KMP_NEXT_CAP = 5
+LCP_SAME_MULT = 1.50
+LCP_OTHER_MULT = 0.80
+SEG_QUERY_STEPS = 4
+SEG_QUERY_RATIO = 0.60
+HEURISTIC_MULT = 1.25
+MOD_CYCLE = 7
+MOD_CYCLE_START = 1.30
+MOD_CYCLE_STEP = 0.10
+MOD_CYCLE_BURST = 2.00
+SPLAY_STEP = 0.07
+SPLAY_CAP = 6
+MIN_CUT_RATIO = 0.35
+MIN_CUT_BOSS_RATIO = 0.60
+MIN_CUT_SPREAD = 0.15
+MIN_CUT_BOSS_SPREAD = 0.18
+MULTI_MATCH_RATIO = 0.30
+SAM_ATK_STEP = 0.15
+SAM_HP_STEP = 0.08
+SAM_CAP = 5
 
 EMPTY_PENALTY_INTERVAL = 2.0
 ENERGY_PER_ROUND = 25
@@ -136,9 +174,9 @@ CARDS_RAW = [
     ('range_dp', '\u533a\u95f4 DP', 2, '\u63d0\u9ad8', 1.05, 'dynamic_programming', 66, 647, 6, 9, 'range_aoe',
      '\u8fde\u7eed\u533a\u95f4\u4f24\u5bb3',
      '\u6280\u80fd\uff1a\u5bf9\u76ee\u6807\u53ca\u5176\u5de6\u53f3\u76f8\u90bb\u683c\u9020\u6210 80% \u4f24\u5bb3'),
-    ('segment_tree', '\u7ebf\u6bb5\u6811', 2, '\u63d0\u9ad8', 1.05, 'data_structure', 64, 632, 6, 9, 'charge_burst',
-     '\u84c4\u529b\u540e\u7206\u53d1',
-     '\u88ab\u52a8\uff1a\u6bcf\u7b2c 4 \u6b21\u666e\u653b\u9020\u6210 3 \u500d\u4f24\u5bb3'),
+    ('segment_tree', '\u7ebf\u6bb5\u6811', 2, '\u63d0\u9ad8', 1.05, 'data_structure', 64, 632, 6, 9, 'seg_query',
+     '\u533a\u95f4\u67e5\u8be2\uff0c\u61d2\u6807\u8bb0\u4e0b\u653e',
+     '\u88ab\u52a8\uff1a\u6bcf\u7b2c 4 \u6b21\u666e\u653b\u989d\u5916\u5bf9\u5c04\u7a0b\u5185\u5168\u4f53\u654c\u4eba\u9020\u6210 60% \u4f24\u5bb3'),
     ('sqrt_block', '\u5206\u5757', 2, '\u63d0\u9ad8', 1.05, 'data_structure', 67, 655, 6, 9, 'block_aoe',
      '2\xd72 \u5757\u63a7\u5236',
      '\u6280\u80fd\uff1a\u5bf9\u5c04\u7a0b\u5185\u76ee\u6807\u6240\u5728\u7684\u56fa\u5b9a 2\xd72 \u68cb\u76d8\u5206\u5757\u9020\u6210 70% \u4f24\u5bb3'),
@@ -166,15 +204,15 @@ CARDS_RAW = [
     ('monotonic_queue', '\u5355\u8c03\u961f\u5217', 3, '\u63d0\u9ad8', 1.05, 'data_structure', 111, 1115, 9, 16, 'sliding_max',
      '\u6ed1\u7a97\u653b\u51fb\u6700\u5f3a\u8005',
      '\u88ab\u52a8\uff1a\u4f18\u5148\u653b\u51fb\u5c04\u7a0b\u5185\u653b\u51fb\u529b\u6700\u9ad8\u7684\u654c\u4eba'),
-    ('a_star', 'A*', 3, '\u63d0\u9ad8', 1.05, 'search', 110, 1100, 9, 16, 'finish_weak',
-     '\u6253\u6700\u53ef\u80fd\u51fb\u6740\u76ee\u6807',
-     '\u88ab\u52a8\uff1a\u4f18\u5148\u653b\u51fb\u5c04\u7a0b\u5185\u751f\u547d\u6700\u4f4e\u7684\u654c\u4eba'),
+    ('a_star', 'A*', 3, '\u63d0\u9ad8', 1.05, 'search', 110, 1100, 9, 16, 'heuristic',
+     '\u542f\u53d1\u5f0f\u4f30\u4ef7 f=g+h',
+     '\u88ab\u52a8\uff1a\u6309\u300c\u8ddd\u79bb + \u5269\u4f59\u751f\u547d/\u653b\u51fb\u300d\u9009\u4f30\u4ef7\u6700\u4f4e\u7684\u76ee\u6807\uff0c\u5bf9\u5176\u4f24\u5bb3 \u00d71.25'),
     ('bidirectional', '\u53cc\u5411\u641c\u7d22', 3, '\u63d0\u9ad8', 1.05, 'search', 86, 840, 9, 16, 'pincer',
      '\u4e24\u7aef\u5939\u51fb',
      '\u6280\u80fd\uff1a\u5bf9\u5c04\u7a0b\u5185\u6700\u8fd1\u4e0e\u6700\u8fdc\u7684\u654c\u4eba\u5404\u9020\u6210 120% \u4f24\u5bb3'),
-    ('fermat', '\u8d39\u9a6c\u5c0f\u5b9a\u7406', 3, '\u63d0\u9ad8', 1.05, 'number_theory', 96, 954, 9, 16, 'prime_round',
-     '\u8d28\u6570\u56de\u5408\u7206\u53d1',
-     '\u88ab\u52a8\uff1a\u8d28\u6570\u56de\u5408\u4f24\u5bb3 \xd71.8'),
+    ('fermat', '\u8d39\u9a6c\u5c0f\u5b9a\u7406', 3, '\u63d0\u9ad8', 1.05, 'number_theory', 96, 954, 9, 16, 'mod_cycle',
+     '\u6a21\u5e42\u5468\u671f\uff0c\u5f52\u96f6\u7206\u53d1',
+     '\u88ab\u52a8\uff1a7 \u51fb\u4e3a\u4e00\u4e2a\u6a21\u5468\u671f\uff0c\u500d\u7387\u7531 1.3 \u9010\u51fb\u964d\u5230 0.8\uff0c\u7b2c 7 \u51fb \u00d72.0'),
     ('expectation', '\u671f\u671b', 3, '\u63d0\u9ad8', 1.05, 'probability', 98, 970, 9, 16, 'expectation',
      '\u968f\u673a\u8f6c\u56fa\u5b9a',
      '\u88ab\u52a8\uff1a\u666e\u653b\u4f24\u5bb3\u6052\u5b9a \xd71.25'),
@@ -199,48 +237,48 @@ CARDS_RAW = [
     ('two_pointers', '\u53cc\u6307\u9488', 1, '\u666e\u901a', 0.75, 'greedy', 42, 410, 4, 4, 'pierce',
      '\u8d2f\u7a7f\u4e00\u7ebf',
      '\u88ab\u52a8\uff1a\u666e\u653b\u547d\u4e2d\u540e\uff0c\u5bf9\u76ee\u6807\u6b63\u540e\u65b9\u540c\u5217\u76f8\u90bb\u7684\u654c\u4eba\u8ffd\u52a0 50% \u4f24\u5bb3'),
-    ('prefix_sum', '\u524d\u7f00\u548c', 1, '\u666e\u901a', 0.75, 'diff', 39, 392, 4, 4, 'synergy',
-     '\u7d2f\u52a0\u540c\u7c7b\u7684\u529b\u91cf',
-     '\u88ab\u52a8\uff1a\u5165\u573a\u65f6\u6bcf\u6709\u4e00\u540d\u540c\u6d41\u6d3e\u53cb\u519b\uff0c\u653b\u51fb +12%\uff08\u6700\u591a 4 \u5c42\uff09'),
+    ('prefix_sum', '\u524d\u7f00\u548c', 1, '\u666e\u901a', 0.75, 'diff', 39, 392, 4, 4, 'prefix_growth',
+     '\u524d\u7f00\u7d2f\u52a0\uff0c\u8d8a\u6218\u8d8a\u5f3a',
+     '\u88ab\u52a8\uff1a\u6bcf\u6b21\u666e\u653b\u4f7f\u4f24\u5bb3 +10%\uff08\u6700\u591a 6 \u5c42\uff09\uff0c\u540c\u4e00\u573a\u6218\u6597\u6301\u7eed\u7d2f\u79ef'),
     ('huffman', '\u54c8\u592b\u66fc\u7f16\u7801', 1, '\u666e\u901a', 0.75, 'greedy', 40, 400, 4, 4, 'lifesteal',
      '\u5e26\u6743\u8def\u5f84\u56de\u8840',
      '\u88ab\u52a8\uff1a\u666e\u653b\u9020\u6210\u4f24\u5bb3\u540e\uff0c\u56de\u590d\u8be5\u6b21\u5b9e\u9645\u4f24\u5bb3 30% \u7684\u751f\u547d\uff08\u4e0d\u8d85\u8fc7\u4e0a\u9650\uff09'),
     ('topo_sort', '\u62d3\u6251\u6392\u5e8f', 2, '\u666e\u901a', 0.75, 'graph_theory', 58, 575, 6, 9, 'freeze',
      '\u51bb\u7ed3\u4f9d\u8d56\u73af',
      '\u6280\u80fd\uff1a\u5c04\u7a0b\u5185\u5168\u4f53\u654c\u4eba\u53d7 40% \u4f24\u5bb3\u5e76\u505c\u653b 2 \u79d2'),
-    ('kmp', 'KMP', 2, '\u63d0\u9ad8', 1.05, 'string', 66, 650, 6, 9, 'pierce',
-     '\u5931\u914d\u4e0d\u56de\u9000',
-     '\u88ab\u52a8\uff1a\u666e\u653b\u547d\u4e2d\u540e\uff0c\u5bf9\u76ee\u6807\u6b63\u540e\u65b9\u540c\u5217\u76f8\u90bb\u7684\u654c\u4eba\u8ffd\u52a0 50% \u4f24\u5bb3'),
-    ('prim', '\u6700\u5c0f\u751f\u6210\u6811', 2, '\u63d0\u9ad8', 1.05, 'graph_theory', 63, 628, 6, 9, 'synergy',
-     '\u8fde\u8fb9\u6210\u7f51',
-     '\u88ab\u52a8\uff1a\u5165\u573a\u65f6\u6bcf\u6709\u4e00\u540d\u540c\u6d41\u6d3e\u53cb\u519b\uff0c\u653b\u51fb +12%\uff08\u6700\u591a 4 \u5c42\uff09'),
+    ('kmp', 'KMP', 2, '\u63d0\u9ad8', 1.05, 'string', 66, 650, 6, 9, 'kmp_next',
+     '\u5931\u914d\u4e0d\u56de\u9000\uff0cnext \u8868\u8df3\u8f6c',
+     '\u88ab\u52a8\uff1a\u672a\u51fb\u6740\u76ee\u6807\u65f6\u4e0b\u6b21\u4f24\u5bb3 +10%\uff08\u6700\u591a 5 \u5c42\uff09\uff0c\u51fb\u6740\u540e\u6e05\u96f6\u91cd\u6765'),
+    ('prim', '\u6700\u5c0f\u751f\u6210\u6811', 2, '\u63d0\u9ad8', 1.05, 'graph_theory', 63, 628, 6, 9, 'mst_link',
+     '\u8fde\u8fb9\u6210\u7f51\uff0c\u5171\u62c5\u51b2\u51fb',
+     '\u88ab\u52a8\uff1a\u5165\u573a\u65f6\u6bcf\u6709\u4e00\u540d\u6b63\u4ea4\u76f8\u90bb\u53cb\u519b\uff0c\u51cf\u4f24 6%\uff08\u6700\u591a 4 \u8fb9 / 24%\uff09'),
     ('flood_fill', '\u6cdb\u6d2a\u586b\u5145', 2, '\u63d0\u9ad8', 1.05, 'search', 62, 615, 6, 9, 'splash',
      '\u56db\u90bb\u6269\u6563',
      '\u88ab\u52a8\uff1a\u666e\u653b\u65f6\uff0c\u5bf9\u76ee\u6807\u4e0a\u4e0b\u5de6\u53f3\u76f8\u90bb\u7684\u654c\u4eba\u5404\u9020\u6210 35% \u4f24\u5bb3'),
-    ('ac_automaton', 'AC \u81ea\u52a8\u673a', 3, '\u63d0\u9ad8', 1.05, 'string', 92, 905, 9, 16, 'splash',
-     '\u4e00\u6b21\u5339\u914d\uff0c\u591a\u70b9\u547d\u4e2d',
-     '\u88ab\u52a8\uff1a\u666e\u653b\u65f6\uff0c\u5bf9\u76ee\u6807\u4e0a\u4e0b\u5de6\u53f3\u76f8\u90bb\u7684\u654c\u4eba\u5404\u9020\u6210 35% \u4f24\u5bb3'),
-    ('tarjan', '\u5f3a\u8fde\u901a\u5206\u91cf', 3, '\u63d0\u9ad8', 1.05, 'graph_theory', 95, 940, 9, 16, 'synergy',
-     '\u540c\u73af\u5171\u632f',
-     '\u88ab\u52a8\uff1a\u5165\u573a\u65f6\u6bcf\u6709\u4e00\u540d\u540c\u6d41\u6d3e\u53cb\u519b\uff0c\u653b\u51fb +12%\uff08\u6700\u591a 4 \u5c42\uff09'),
+    ('ac_automaton', 'AC \u81ea\u52a8\u673a', 3, '\u63d0\u9ad8', 1.05, 'string', 92, 905, 9, 16, 'multi_match',
+     'fail \u94fe\uff0c\u4e00\u6b21\u626b\u63cf\u591a\u547d\u4e2d',
+     '\u88ab\u52a8\uff1a\u666e\u653b\u540e\u5bf9\u5c04\u7a0b\u5185\u6240\u6709\u540c\u540d\u654c\u4eba\u5404\u8ffd\u52a0 30% \u4f24\u5bb3'),
+    ('tarjan', '\u5f3a\u8fde\u901a\u5206\u91cf', 3, '\u63d0\u9ad8', 1.05, 'graph_theory', 95, 940, 9, 16, 'scc_mark',
+     '\u73af\u5185\u4e92\u76f8\u6807\u8bb0',
+     '\u88ab\u52a8\uff1a\u666e\u653b\u7ed9\u76ee\u6807\u53e0\u52a0 1 \u5c42\u6807\u8bb0\uff0c\u6bcf\u5c42\u4f7f\u5176\u627f\u53d7\u4f24\u5bb3 +8%\uff08\u6700\u591a 3 \u5c42\uff09'),
     ('minimax', '\u6781\u5c0f\u5316\u6781\u5927', 3, '\u63d0\u9ad8', 1.05, 'game_theory', 105, 1030, 9, 16, 'rampage',
      '\u52a3\u52bf\u65f6\u640f\u5230\u5e95',
      '\u88ab\u52a8\uff1a\u81ea\u8eab\u751f\u547d\u4f4e\u4e8e\u4e0a\u9650 50% \u65f6\uff0c\u653b\u51fb \xd71.6'),
-    ('suffix_array', '\u540e\u7f00\u6570\u7ec4', 3, '\u63d0\u9ad8', 1.05, 'string', 99, 980, 9, 16, 'pierce',
-     '\u6cbf\u540e\u7f00\u4e00\u8def\u7a7f\u900f',
-     '\u88ab\u52a8\uff1a\u666e\u653b\u547d\u4e2d\u540e\uff0c\u5bf9\u76ee\u6807\u6b63\u540e\u65b9\u540c\u5217\u76f8\u90bb\u7684\u654c\u4eba\u8ffd\u52a0 50% \u4f24\u5bb3'),
-    ('splay', '\u4f38\u5c55\u6811', 4, '\u7701\u9009', 1.25, 'data_structure', 148, 1480, 13, 25, 'lifesteal',
-     '\u8d8a\u4f38\u5c55\u8d8a\u8010\u4e45',
-     '\u88ab\u52a8\uff1a\u666e\u653b\u9020\u6210\u4f24\u5bb3\u540e\uff0c\u56de\u590d\u8be5\u6b21\u5b9e\u9645\u4f24\u5bb3 30% \u7684\u751f\u547d\uff08\u4e0d\u8d85\u8fc7\u4e0a\u9650\uff09'),
-    ('network_flow', '\u7f51\u7edc\u6d41', 4, '\u7701\u9009', 1.25, 'graph_theory', 150, 1495, 13, 25, 'freeze',
-     '\u6ee1\u6d41\u5373\u963b\u585e',
-     '\u6280\u80fd\uff1a\u5c04\u7a0b\u5185\u5168\u4f53\u654c\u4eba\u53d7 40% \u4f24\u5bb3\u5e76\u505c\u653b 2 \u79d2'),
-    ('fft', '\u5feb\u901f\u5085\u91cc\u53f6\u53d8\u6362', 5, '\u7701\u9009', 1.25, 'math', 153, 1530, 15, 31, 'synergy',
-     '\u5377\u79ef\u540c\u9891',
-     '\u88ab\u52a8\uff1a\u5165\u573a\u65f6\u6bcf\u6709\u4e00\u540d\u540c\u6d41\u6d3e\u53cb\u519b\uff0c\u653b\u51fb +12%\uff08\u6700\u591a 4 \u5c42\uff09'),
-    ('suffix_automaton', '\u540e\u7f00\u81ea\u52a8\u673a', 5, '\u7701\u9009', 1.25, 'string', 156, 1550, 15, 31, 'rampage',
-     '\u72b6\u6001\u538b\u7f29\uff0c\u7edd\u5883\u7ffb\u76d8',
-     '\u88ab\u52a8\uff1a\u81ea\u8eab\u751f\u547d\u4f4e\u4e8e\u4e0a\u9650 50% \u65f6\uff0c\u653b\u51fb \xd71.6'),
+    ('suffix_array', '\u540e\u7f00\u6570\u7ec4', 3, '\u63d0\u9ad8', 1.05, 'string', 99, 980, 9, 16, 'lcp_chain',
+     '\u6700\u957f\u516c\u5171\u524d\u7f00',
+     '\u88ab\u52a8\uff1a\u8fde\u7eed\u653b\u51fb\u540c\u540d\u654c\u4eba\u65f6\u4f24\u5bb3 \u00d71.5\uff0c\u5207\u6362\u76ee\u6807\u65f6 \u00d70.8'),
+    ('splay', '\u4f38\u5c55\u6811', 4, '\u7701\u9009', 1.25, 'data_structure', 148, 1480, 13, 25, 'splay_rotate',
+     '\u8bbf\u95ee\u5373\u65cb\u6839\uff0c\u644a\u8fd8\u4ee3\u4ef7',
+     '\u88ab\u52a8\uff1a\u6bcf\u6b21\u666e\u653b +7% \u4f24\u5bb3\uff08\u6700\u591a 6 \u5c42\uff09\uff0c\u4f46\u6bcf\u6b21\u53d7\u4f24\u635f\u5931\u4e00\u534a\u5c42\u6570'),
+    ('network_flow', '\u7f51\u7edc\u6d41', 4, '\u7701\u9009', 1.25, 'graph_theory', 150, 1495, 13, 25, 'min_cut',
+     '\u6700\u5c0f\u5272\uff0c\u5bb9\u91cf\u74f6\u9888',
+     '\u6280\u80fd\uff1a\u5c04\u7a0b\u5185\u5168\u4f53\u53d7 35% \u4f24\u5bb3\uff08\u654c\u4eba\u8d8a\u591a\u5355\u4f53\u8d8a\u4f4e\uff09\uff0c\u8840\u91cf\u6700\u9ad8\u8005\u989d\u5916 60%'),
+    ('fft', '\u5feb\u901f\u5085\u91cc\u53f6\u53d8\u6362', 5, '\u7701\u9009', 1.25, 'math', 153, 1530, 15, 31, 'fft_butterfly',
+     '\u8776\u5f62\u8fd0\u7b97\uff0c\u5947\u5076\u76f8\u62b5',
+     '\u88ab\u52a8\uff1a\u5947\u6570\u6b21\u666e\u653b \u00d70.75\u3001\u5076\u6570\u6b21 \u00d71.7\uff1b\u9ad8\u9762\u677f\u7684\u4ee3\u4ef7\u662f\u8f93\u51fa\u6781\u4e0d\u7a33\u5b9a'),
+    ('suffix_automaton', '\u540e\u7f00\u81ea\u52a8\u673a', 5, '\u7701\u9009', 1.25, 'string', 156, 1550, 15, 31, 'sam_compress',
+     '\u72b6\u6001\u538b\u7f29\uff0c\u4ee5\u8840\u6362\u653b',
+     '\u88ab\u52a8\uff1a\u6bcf\u540d\u540c\u540d\u53cb\u519b\u4f7f\u653b\u51fb +15%\uff08\u542b\u81ea\u5df1\uff09\uff1b\u5408\u5e76\u72b6\u6001\u4f1a\u6324\u5360\u751f\u547d\u4e0a\u9650 -8%\uff08\u72ec\u82d7\u4e0d\u6263\uff0c\u6700\u591a 5 \u5c42\uff09'),
 ]
 
 RANGE_BY_COST = {1: 4, 2: 4, 3: 5, 4: 6, 5: 8}
@@ -248,7 +286,7 @@ RANGE_BY_COST = {1: 4, 2: 4, 3: 5, 4: 6, 5: 8}
 ACTIVE_SKILLS = frozenset({
     'line', 'multi', 'aoe', 'aoe_debuff', 'block_aoe', 'range_aoe',
     'delayed_line', 'swap_stats', 'sort_line', 'compress_line',
-    'pincer', 'partition', 'divide_conquer', 'sweep', 'freeze',
+    'pincer', 'partition', 'divide_conquer', 'sweep', 'freeze', 'min_cut',
 })
 
 # \u5546\u5e97\u5237\u65b0\uff1a\u6bcf\u8f6e\u7b2c\u4e00\u6b21\u514d\u8d39\uff0c\u7b2c\u4e8c\u6b21\u8d77\u6309\u57fa\u7840\u4ef7\u683c\u9012\u589e\u3002
@@ -264,23 +302,23 @@ CARDS = [{
     'active': c[10] in ACTIVE_SKILLS,
     'skillCost': SKILL_ENERGY_COST if c[10] in ACTIVE_SKILLS else 0,
 } for c in CARDS_RAW]
-CARD_ROLES = {'linear_dp': ('\u7ebf\u6027\u7fa4\u653b', '\u4e2d\u6392', '\u8ba9\u76ee\u6807\u884c\u6216\u5217\u805a\u96c6\uff0c\u6280\u80fd\u6309\u5c04\u7a0b\u7b5b\u9009\u3002'), 'tree_array': ('\u56e2\u961f\u6210\u957f', '\u4e2d\u540e\u6392', '\u53cb\u519b\u6bcf\u6b21\u666e\u653b\u6216\u65bd\u6cd5\u52a0\u5c42\uff0c\u9002\u5408\u884c\u52a8\u5bc6\u96c6\u7684\u9635\u5bb9\u3002'), 'monotonic_stack': ('\u5468\u671f\u7206\u53d1', '\u4e2d\u6392', '\u6bcf\u56db\u51fb\u7206\u53d1\uff0c\u907f\u514d\u8f93\u51fa\u4f4d\u8fc7\u65e9\u9635\u4ea1\u3002'), 'greedy': ('\u4f4e\u8d39\u6536\u5272', '\u4e2d\u6392', '\u4f18\u5148\u5c04\u7a0b\u5185\u6b8b\u8840\uff0c\u4e0d\u4f1a\u4e3a\u8fdc\u5904\u6b8b\u8840\u653e\u5f03\u5f53\u524d\u76ee\u6807\u3002'), 'sort': ('\u91cd\u6392\u63a7\u573a', '\u4e2d\u6392', '\u6270\u4e71\u5c04\u7a0b\u5185\u540c\u884c\u7ad9\u4f4d\uff0c\u4f24\u5bb3\u4e0d\u662f\u4e3b\u8981\u4ef7\u503c\u3002'), 'dfs': ('\u8fde\u9501\u6536\u5272', '\u4e2d\u6392', '\u51fb\u6740\u540e\u7acb\u5373\u7eed\u653b\uff0c\u672c\u573a\u6700\u591a\u8ffd\u52a0\u4e09\u6b21\u3002'), 'diff': ('\u5ef6\u65f6\u7fa4\u653b', '\u540e\u6392', '\u4f24\u5bb3\u5728\u6807\u8bb0\u4e24\u79d2\u540e\u7ed3\u7b97\uff0c\u4fdd\u62a4\u65bd\u6cd5\u8005\u4e89\u53d6\u591a\u6b21\u6807\u8bb0\u3002'), 'xor': ('\u9ad8\u653b\u53cd\u5236', '\u4fdd\u62a4\u4f4d', '\u4ea4\u6362\u5c04\u7a0b\u5185\u6700\u9ad8\u653b\u51fb\uff0c\u9002\u5408\u9488\u5bf9\u9ad8\u8d39\u6838\u5fc3\u3002'), 'gcd': ('\u5206\u62c5\u5766\u8f85', '\u524d\u4e2d\u6392', '\u4e0a\u4e0b\u5de6\u53f3\u63a5\u4f4f\u961f\u53cb\u7684\u4f24\u5bb3\uff0c\u5206\u62c5\u603b\u91cf\u4e3a30%\uff0c\u975e\u6bcf\u4e2agcd\u540430%\u3002'), 'bfs': ('\u5168\u573a\u51cf\u901f', '\u4fdd\u62a4\u4f4d', '\u5168\u573a\u4f24\u5bb3\u5e76\u9650\u65f6\u964d\u4f4e\u666e\u653b\u51c6\u5907\u901f\u5ea6\uff0c\u4e0d\u964d\u4f4e\u6280\u80fd\u9891\u7387\u3002'), 'pigeonhole': ('\u5bc6\u96c6\u514b\u5236', '\u4e2d\u6392', '\u654c\u65b9\u56f4\u7ed5\u76ee\u6807\u5bc6\u96c6\u65f6\u89e6\u53d1\u7ffb\u500d\uff0c\u5206\u6563\u654c\u4eba\u6536\u76ca\u4f4e\u3002'), 'prime_sieve': ('\u56de\u5408\u7206\u53d1', '\u4e2d\u6392', '\u7b2c2\u30013\u30015\u30017\u56de\u5408\u666e\u653b\u589e\u5f3a\uff0c\u975e\u8d28\u6570\u56de\u5408\u4fdd\u6301\u57fa\u7840\u8f93\u51fa\u3002'), 'mod_op': ('\u7a33\u5b9a\u5468\u671f\u8f93\u51fa', '\u4e2d\u6392', '\u6bcf\u4e09\u51fb2.5\u500d\uff0c\u9002\u5408\u7a33\u5b9a\u7ad9\u573a\u3002'), 'shift': ('\u73bb\u7483\u5927\u70ae', '\u540e\u6392', '\u6218\u5185\u653b\u51fb\u7ffb\u500d\u3001\u751f\u547d\u51cf\u534a\uff0c\u907f\u514d\u76f4\u63a5\u627f\u4f24\u3002'), 'range_dp': ('\u5c40\u90e8\u7fa4\u653b', '\u4e2d\u540e\u6392', '\u6253\u76ee\u6807\u53ca\u5de6\u53f3\u76f8\u90bb\u683c\uff0c\u514b\u5236\u6a2a\u5411\u5bc6\u96c6\u9635\u3002'), 'segment_tree': ('\u84c4\u529b\u7206\u53d1', '\u4e2d\u6392', '\u7b2c\u56db\u51fb\u7206\u53d1\uff0cO2\u53ef\u4ee5\u7f29\u77ed\u51c6\u5907\u5468\u671f\u3002'), 'sqrt_block': ('\u5206\u5757\u7fa4\u653b', '\u4e2d\u540e\u6392', '\u56fa\u5b9a\u68cb\u76d82\xd72\u5206\u5757\uff0c\u4e0d\u662f\u4ee5\u76ee\u6807\u4e3a\u5de6\u4e0a\u89d2\u4efb\u610f\u53d6\u5757\u3002'), 'pruning': ('\u788e\u4f24\u9632\u5fa1', '\u524d\u6392', '\u53ea\u9488\u5bf9\u4f4e\u4e8e\u81ea\u8eab\u653b\u51fb50%\u7684\u5355\u6b21\u4f24\u5bb3\uff0c\u91cd\u51fb\u4ecd\u5371\u9669\u3002'), 'ids': ('\u957f\u5c40\u8fdc\u7a0b', '\u540e\u6392', '\u7b2c\u4e00\u56de\u5408\u57fa\u7840\u5c04\u7a0b\uff0c\u968f\u56de\u5408\u9010\u6b65\u589e\u52a0\u3002'), 'merge_sort': ('\u751f\u547d\u8c03\u914d', '\u90bb\u63a5\u4fdd\u62a4\u4f4d', '\u5f00\u6218\u65f6\u4e3a\u8fde\u901a\u7ec4\u5747\u5206\u5f53\u524d\u751f\u547d\uff1b\u4e0d\u662f\u51ed\u7a7a\u6cbb\u7597\u3002'), 'quick_sort': ('\u9ad8\u653b\u70b9\u7fa4\u4f24', '\u4e2d\u540e\u6392', '\u5c04\u7a0b\u5185\u6309\u5f53\u524d\u653b\u51fb\u6392\u5e8f\uff0c\u4f18\u5148\u6253\u8f93\u51fa\u4f4d\u3002'), 'divide': ('\u6761\u4ef6\u7fa4\u7206', '\u4e2d\u540e\u6392', '\u7b2c\u4e00\u6bb5\u672a\u51fb\u6740\u4efb\u4f55\u76ee\u6807\u624d\u6709\u8865\u5200\u6bb5\u3002'), 'inverse': ('\u666e\u653b\u53cd\u5236', '\u524d\u6392', '\u6309\u5b9e\u9645\u635f\u5931\u751f\u547d\u53cd\u5f39\uff0c\u4e0d\u53cd\u5f39\u88ab\u62a4\u76fe\u5438\u6536\u7684\u90e8\u5206\u3002'), 'bitmask_dp': ('\u540c\u884c\u534f\u540c\u70ae', '\u540c\u884c\u4fdd\u62a4\u4f4d', '\u540c\u884c\u9ad8\u653b\u51fb\u961f\u53cb\u589e\u5f3a\u6280\u80fd\uff0c\u9700\u517c\u987e\u5c04\u7a0b\u4e0e\u7ad9\u4f4d\u3002'), 'monotonic_queue': ('\u9ad8\u653b\u538b\u5236', '\u4e2d\u6392', '\u4f18\u5148\u653b\u51fb\u5c04\u7a0b\u5185\u6700\u9ad8\u653b\u51fb\u8005\uff0c\u53ef\u80fd\u653e\u8fc7\u6b8b\u8840\u3002'), 'a_star': ('\u9ad8\u8d39\u6536\u5272', '\u4e2d\u540e\u6392', '\u9ad8\u57fa\u7840\u9762\u677f\u8865\u5200\uff0c\u76ee\u6807\u4f18\u5148\u7ea7\u53d7\u5c04\u7a0b\u7ea6\u675f\u3002'), 'bidirectional': ('\u53cc\u7aef\u6253\u51fb', '\u4e2d\u540e\u6392', '\u5c04\u7a0b\u5185\u6700\u8fd1\u4e0e\u6700\u8fdc\u5404\u4e00\u51fb\uff0c\u53ea\u6709\u4e00\u540d\u654c\u4eba\u65f6\u4e0d\u91cd\u590d\u3002'), 'fermat': ('\u56de\u5408\u7206\u53d1', '\u4e2d\u540e\u6392', '\u8d28\u6570\u56de\u5408\u589e\u5f3a\uff0c\u9002\u5408\u6309\u56de\u5408\u89c4\u5212\u6295\u5165\u3002'), 'expectation': ('\u7a33\u5b9a\u5355\u4f53', '\u4e2d\u540e\u6392', '\u6052\u5b9a\u666e\u653b\u500d\u7387\uff0c\u9002\u5408\u9700\u8981\u7a33\u5b9a\u8f93\u51fa\u7684\u9635\u5bb9\u3002'), 'sweep_line': ('\u540c\u884c\u9012\u589e\u7fa4\u653b', '\u4e2d\u540e\u6392', '\u76ee\u6807\u540c\u884c\u81f3\u591a\u4e09\u4eba\uff0c\u7531\u8fd1\u5230\u8fdc\u9012\u589e\u3002'), 'cdq': ('\u540e\u7a0b\u6838\u5fc3', '\u4fdd\u62a4\u540e\u6392', '\u524d10\u79d2\u504f\u5f31\uff0c\u6b64\u540e\u7206\u53d1\uff0c\u5fc5\u987b\u4fdd\u62a4\u5230\u540e\u534a\u573a\u3002'), 'spfa': ('\u968f\u673a\u505c\u987f\u8f93\u51fa', '\u4fdd\u62a4\u4e2d\u540e\u6392', '\u653b\u901f\u5feb\u3001\u653b\u51fb\u9ad8\uff0c\u4f46\u6bcf\u6b21\u666e\u653b\u540e20%\u6982\u7387\u989d\u5916\u53614\u79d2\u3002'), 'o2': ('\u7ad9\u4f4d\u653b\u901f\u6838\u5fc3', '\u90bb\u63a5\u4fdd\u62a4\u4f4d', '0\u653b\u51fb\u3001280\u8840\uff1b\u8986\u76d6\u591a\u4eba\u518d\u6295\u5165\uff0c\u5206\u6563\u6216\u4e3b\u52a8\u6280\u80fd\u9635\u5bb9\u4e0d\u5b9c\u76f2\u5e26\u3002'), 'genetic': ('\u6c38\u4e45\u6210\u957f\u6838\u5fc3', '\u4fdd\u62a4\u4e2d\u540e\u6392', '\u51fb\u6740\u53e0\u5c42\u6700\u591a\u4e09\u5c42\uff0c\u5e78\u5b58\u68cb\u5b50\u7684\u5c42\u6570\u8de8\u56de\u5408\u4fdd\u7559\u3002'), 'matrix_pow': ('\u9ad8\u8d39\u65f6\u95f4\u6838\u5fc3', '\u540e\u6392', '\u5165\u573a\u653b\u9ad8\u8840\u51cf\uff0c6/12/18\u79d2\u9010\u6b65\u6210\u957f\u3002')}
+CARD_ROLES = {'linear_dp': ('\u7ebf\u6027\u7fa4\u653b', '\u4e2d\u6392', '\u8ba9\u76ee\u6807\u884c\u6216\u5217\u805a\u96c6\uff0c\u6280\u80fd\u6309\u5c04\u7a0b\u7b5b\u9009\u3002'), 'tree_array': ('\u56e2\u961f\u6210\u957f', '\u4e2d\u540e\u6392', '\u53cb\u519b\u6bcf\u6b21\u666e\u653b\u6216\u65bd\u6cd5\u52a0\u5c42\uff0c\u9002\u5408\u884c\u52a8\u5bc6\u96c6\u7684\u9635\u5bb9\u3002'), 'monotonic_stack': ('\u5468\u671f\u7206\u53d1', '\u4e2d\u6392', '\u6bcf\u56db\u51fb\u7206\u53d1\uff0c\u907f\u514d\u8f93\u51fa\u4f4d\u8fc7\u65e9\u9635\u4ea1\u3002'), 'greedy': ('\u4f4e\u8d39\u6536\u5272', '\u4e2d\u6392', '\u4f18\u5148\u5c04\u7a0b\u5185\u6b8b\u8840\uff0c\u4e0d\u4f1a\u4e3a\u8fdc\u5904\u6b8b\u8840\u653e\u5f03\u5f53\u524d\u76ee\u6807\u3002'), 'sort': ('\u91cd\u6392\u63a7\u573a', '\u4e2d\u6392', '\u6270\u4e71\u5c04\u7a0b\u5185\u540c\u884c\u7ad9\u4f4d\uff0c\u4f24\u5bb3\u4e0d\u662f\u4e3b\u8981\u4ef7\u503c\u3002'), 'dfs': ('\u8fde\u9501\u6536\u5272', '\u4e2d\u6392', '\u51fb\u6740\u540e\u7acb\u5373\u7eed\u653b\uff0c\u672c\u573a\u6700\u591a\u8ffd\u52a0\u4e09\u6b21\u3002'), 'diff': ('\u5ef6\u65f6\u7fa4\u653b', '\u540e\u6392', '\u4f24\u5bb3\u5728\u6807\u8bb0\u4e24\u79d2\u540e\u7ed3\u7b97\uff0c\u4fdd\u62a4\u65bd\u6cd5\u8005\u4e89\u53d6\u591a\u6b21\u6807\u8bb0\u3002'), 'xor': ('\u9ad8\u653b\u53cd\u5236', '\u4fdd\u62a4\u4f4d', '\u4ea4\u6362\u5c04\u7a0b\u5185\u6700\u9ad8\u653b\u51fb\uff0c\u9002\u5408\u9488\u5bf9\u9ad8\u8d39\u6838\u5fc3\u3002'), 'gcd': ('\u5206\u62c5\u5766\u8f85', '\u524d\u4e2d\u6392', '\u4e0a\u4e0b\u5de6\u53f3\u63a5\u4f4f\u961f\u53cb\u7684\u4f24\u5bb3\uff0c\u5206\u62c5\u603b\u91cf\u4e3a30%\uff0c\u975e\u6bcf\u4e2agcd\u540430%\u3002'), 'bfs': ('\u5168\u573a\u51cf\u901f', '\u4fdd\u62a4\u4f4d', '\u5168\u573a\u4f24\u5bb3\u5e76\u9650\u65f6\u964d\u4f4e\u666e\u653b\u51c6\u5907\u901f\u5ea6\uff0c\u4e0d\u964d\u4f4e\u6280\u80fd\u9891\u7387\u3002'), 'pigeonhole': ('\u5bc6\u96c6\u514b\u5236', '\u4e2d\u6392', '\u654c\u65b9\u56f4\u7ed5\u76ee\u6807\u5bc6\u96c6\u65f6\u89e6\u53d1\u7ffb\u500d\uff0c\u5206\u6563\u654c\u4eba\u6536\u76ca\u4f4e\u3002'), 'prime_sieve': ('\u56de\u5408\u7206\u53d1', '\u4e2d\u6392', '\u7b2c2\u30013\u30015\u30017\u56de\u5408\u666e\u653b\u589e\u5f3a\uff0c\u975e\u8d28\u6570\u56de\u5408\u4fdd\u6301\u57fa\u7840\u8f93\u51fa\u3002'), 'mod_op': ('\u7a33\u5b9a\u5468\u671f\u8f93\u51fa', '\u4e2d\u6392', '\u6bcf\u4e09\u51fb2.5\u500d\uff0c\u9002\u5408\u7a33\u5b9a\u7ad9\u573a\u3002'), 'shift': ('\u73bb\u7483\u5927\u70ae', '\u540e\u6392', '\u6218\u5185\u653b\u51fb\u7ffb\u500d\u3001\u751f\u547d\u51cf\u534a\uff0c\u907f\u514d\u76f4\u63a5\u627f\u4f24\u3002'), 'range_dp': ('\u5c40\u90e8\u7fa4\u653b', '\u4e2d\u540e\u6392', '\u6253\u76ee\u6807\u53ca\u5de6\u53f3\u76f8\u90bb\u683c\uff0c\u514b\u5236\u6a2a\u5411\u5bc6\u96c6\u9635\u3002'), 'segment_tree': ('\u84c4\u529b\u7206\u53d1', '\u4e2d\u6392', '\u7ebf\u6bb5\u6811\u628a\u533a\u95f4\u4fee\u6539\u6512\u6210\u61d2\u6807\u8bb0\u518d\u4e00\u6b21\u6027\u4e0b\u653e\uff0c\u6bcf\u56db\u62cd\u6e05\u4e00\u6b21\u5168\u573a\u3002'), 'sqrt_block': ('\u5206\u5757\u7fa4\u653b', '\u4e2d\u540e\u6392', '\u56fa\u5b9a\u68cb\u76d82\xd72\u5206\u5757\uff0c\u4e0d\u662f\u4ee5\u76ee\u6807\u4e3a\u5de6\u4e0a\u89d2\u4efb\u610f\u53d6\u5757\u3002'), 'pruning': ('\u788e\u4f24\u9632\u5fa1', '\u524d\u6392', '\u53ea\u9488\u5bf9\u4f4e\u4e8e\u81ea\u8eab\u653b\u51fb50%\u7684\u5355\u6b21\u4f24\u5bb3\uff0c\u91cd\u51fb\u4ecd\u5371\u9669\u3002'), 'ids': ('\u957f\u5c40\u8fdc\u7a0b', '\u540e\u6392', '\u7b2c\u4e00\u56de\u5408\u57fa\u7840\u5c04\u7a0b\uff0c\u968f\u56de\u5408\u9010\u6b65\u589e\u52a0\u3002'), 'merge_sort': ('\u751f\u547d\u8c03\u914d', '\u90bb\u63a5\u4fdd\u62a4\u4f4d', '\u5f00\u6218\u65f6\u4e3a\u8fde\u901a\u7ec4\u5747\u5206\u5f53\u524d\u751f\u547d\uff1b\u4e0d\u662f\u51ed\u7a7a\u6cbb\u7597\u3002'), 'quick_sort': ('\u9ad8\u653b\u70b9\u7fa4\u4f24', '\u4e2d\u540e\u6392', '\u5c04\u7a0b\u5185\u6309\u5f53\u524d\u653b\u51fb\u6392\u5e8f\uff0c\u4f18\u5148\u6253\u8f93\u51fa\u4f4d\u3002'), 'divide': ('\u6761\u4ef6\u7fa4\u7206', '\u4e2d\u540e\u6392', '\u7b2c\u4e00\u6bb5\u672a\u51fb\u6740\u4efb\u4f55\u76ee\u6807\u624d\u6709\u8865\u5200\u6bb5\u3002'), 'inverse': ('\u666e\u653b\u53cd\u5236', '\u524d\u6392', '\u6309\u5b9e\u9645\u635f\u5931\u751f\u547d\u53cd\u5f39\uff0c\u4e0d\u53cd\u5f39\u88ab\u62a4\u76fe\u5438\u6536\u7684\u90e8\u5206\u3002'), 'bitmask_dp': ('\u540c\u884c\u534f\u540c\u70ae', '\u540c\u884c\u4fdd\u62a4\u4f4d', '\u540c\u884c\u9ad8\u653b\u51fb\u961f\u53cb\u589e\u5f3a\u6280\u80fd\uff0c\u9700\u517c\u987e\u5c04\u7a0b\u4e0e\u7ad9\u4f4d\u3002'), 'monotonic_queue': ('\u9ad8\u653b\u538b\u5236', '\u4e2d\u6392', '\u4f18\u5148\u653b\u51fb\u5c04\u7a0b\u5185\u6700\u9ad8\u653b\u51fb\u8005\uff0c\u53ef\u80fd\u653e\u8fc7\u6b8b\u8840\u3002'), 'a_star': ('\u9ad8\u8d39\u6536\u5272', '\u4e2d\u540e\u6392', 'A* \u7528 f=g+h \u6311\u6700\u6709\u5e0c\u671b\u7684\u8282\u70b9\uff0c\u4f18\u5148\u6253\u8fd1\u4e14\u5feb\u6b7b\u7684\u76ee\u6807\uff0c\u5e76\u81ea\u5e26 25% \u589e\u4f24\u3002'), 'bidirectional': ('\u53cc\u7aef\u6253\u51fb', '\u4e2d\u540e\u6392', '\u5c04\u7a0b\u5185\u6700\u8fd1\u4e0e\u6700\u8fdc\u5404\u4e00\u51fb\uff0c\u53ea\u6709\u4e00\u540d\u654c\u4eba\u65f6\u4e0d\u91cd\u590d\u3002'), 'fermat': ('\u56de\u5408\u7206\u53d1', '\u4e2d\u540e\u6392', '\u6a21\u5e42\u6309\u5468\u671f\u56de\u7ed5\uff0c\u524d\u534a\u5468\u671f\u5360\u4f18\u3001\u540e\u534a\u5468\u671f\u75b2\u8f6f\uff0c\u6700\u540e\u4e00\u51fb\u5f52\u96f6\u65f6\u7206\u53d1\u3002'), 'expectation': ('\u7a33\u5b9a\u5355\u4f53', '\u4e2d\u540e\u6392', '\u6052\u5b9a\u666e\u653b\u500d\u7387\uff0c\u9002\u5408\u9700\u8981\u7a33\u5b9a\u8f93\u51fa\u7684\u9635\u5bb9\u3002'), 'sweep_line': ('\u540c\u884c\u9012\u589e\u7fa4\u653b', '\u4e2d\u540e\u6392', '\u76ee\u6807\u540c\u884c\u81f3\u591a\u4e09\u4eba\uff0c\u7531\u8fd1\u5230\u8fdc\u9012\u589e\u3002'), 'cdq': ('\u540e\u7a0b\u6838\u5fc3', '\u4fdd\u62a4\u540e\u6392', '\u524d10\u79d2\u504f\u5f31\uff0c\u6b64\u540e\u7206\u53d1\uff0c\u5fc5\u987b\u4fdd\u62a4\u5230\u540e\u534a\u573a\u3002'), 'spfa': ('\u968f\u673a\u505c\u987f\u8f93\u51fa', '\u4fdd\u62a4\u4e2d\u540e\u6392', '\u653b\u901f\u5feb\u3001\u653b\u51fb\u9ad8\uff0c\u4f46\u6bcf\u6b21\u666e\u653b\u540e20%\u6982\u7387\u989d\u5916\u53614\u79d2\u3002'), 'o2': ('\u7ad9\u4f4d\u653b\u901f\u6838\u5fc3', '\u90bb\u63a5\u4fdd\u62a4\u4f4d', '0\u653b\u51fb\u3001280\u8840\uff1b\u8986\u76d6\u591a\u4eba\u518d\u6295\u5165\uff0c\u5206\u6563\u6216\u4e3b\u52a8\u6280\u80fd\u9635\u5bb9\u4e0d\u5b9c\u76f2\u5e26\u3002'), 'genetic': ('\u6c38\u4e45\u6210\u957f\u6838\u5fc3', '\u4fdd\u62a4\u4e2d\u540e\u6392', '\u51fb\u6740\u53e0\u5c42\u6700\u591a\u4e09\u5c42\uff0c\u5e78\u5b58\u68cb\u5b50\u7684\u5c42\u6570\u8de8\u56de\u5408\u4fdd\u7559\u3002'), 'matrix_pow': ('\u9ad8\u8d39\u65f6\u95f4\u6838\u5fc3', '\u540e\u6392', '\u5165\u573a\u653b\u9ad8\u8840\u51cf\uff0c6/12\u79d2\u9010\u6b65\u6210\u957f\u3002')}
 CARD_ROLES.update({
     'two_pointers': ('\u7a7f\u900f\u8865\u5200', '\u4e2d\u6392', '\u6cbf\u654c\u4eba\u7eb5\u5217\u7ad9\u4f4d\uff0c\u666e\u653b\u80fd\u987a\u5e26\u6253\u5230\u76ee\u6807\u8eab\u540e\u7684\u654c\u4eba\u3002'),
-    'prefix_sum': ('\u540c\u6d41\u6d3e\u6210\u957f', '\u4e2d\u540e\u6392', '\u4e0e\u540c\u6d41\u6d3e\u5361\u4e00\u8d77\u4e0a\u573a\uff0c\u5165\u573a\u653b\u51fb\u9010\u5c42\u63d0\u9ad8\u3002'),
+    'prefix_sum': ('\u540c\u6d41\u6d3e\u6210\u957f', '\u4e2d\u540e\u6392', '\u524d\u7f00\u548c\u628a\u5386\u53f2\u7d2f\u52a0\u6210\u8868\uff0c\u8d8a\u6253\u5230\u540e\u9762\u5355\u6b21\u4f24\u5bb3\u8d8a\u9ad8\uff0c\u9002\u5408\u6301\u4e45\u6218\u800c\u975e\u901f\u653b\u3002'),
     'huffman': ('\u7eed\u822a\u8f93\u51fa', '\u4e2d\u6392', '\u666e\u653b\u6309\u5b9e\u9645\u4f24\u5bb3\u56de\u8840\uff0c\u9002\u5408\u6301\u4e45\u6218\u800c\u975e\u7206\u53d1\u3002'),
     'topo_sort': ('\u5168\u573a\u505c\u6ede', '\u540e\u6392', '\u5c04\u7a0b\u5185\u5168\u4f53\u505c\u653b 2 \u79d2\uff0c\u4e3a\u53cb\u519b\u4e89\u53d6\u51fa\u624b\u7a97\u53e3\u3002'),
-    'kmp': ('\u7a7f\u900f\u70b9\u6740', '\u4e2d\u6392', '\u6a21\u5f0f\u4e32\u4e0d\u56de\u9000\uff0c\u666e\u653b\u6cbf\u7eb5\u5217\u7a7f\u900f\u5230\u7b2c\u4e8c\u4e2a\u76ee\u6807\u3002'),
-    'prim': ('\u8fde\u8fb9\u534f\u540c', '\u4e2d\u540e\u6392', '\u540c\u6d41\u6d3e\u53cb\u519b\u8d8a\u591a\uff0c\u5165\u573a\u653b\u51fb\u8d8a\u9ad8\u3002'),
+    'kmp': ('\u7a7f\u900f\u70b9\u6740', '\u4e2d\u6392', 'KMP \u5931\u914d\u65f6\u4e0d\u56de\u9000\u4e3b\u4e32\u800c\u662f\u67e5 next \u8868\uff0c\u8fde\u7eed\u5543\u540c\u4e00\u4e2a\u76ee\u6807\u8d8a\u5543\u8d8a\u5feb\u3002'),
+    'prim': ('\u8fde\u8fb9\u534f\u540c', '\u4e2d\u540e\u6392', '\u6700\u5c0f\u751f\u6210\u6811\u7528\u6700\u5c11\u7684\u8fb9\u8fde\u901a\u5168\u573a\uff0c\u8d34\u7740\u961f\u53cb\u7ad9\u80fd\u628a\u4f24\u5bb3\u5206\u644a\u51fa\u53bb\u3002'),
     'flood_fill': ('\u56db\u90bb\u6e85\u5c04', '\u4e2d\u6392', '\u654c\u65b9\u5bc6\u96c6\u7ad9\u4f4d\u65f6\uff0c\u4e00\u6b21\u666e\u653b\u80fd\u6e85\u5230\u591a\u4e2a\u76f8\u90bb\u76ee\u6807\u3002'),
-    'ac_automaton': ('\u591a\u70b9\u6e85\u5c04', '\u4e2d\u540e\u6392', '\u9ad8\u9762\u677f\u914d\u56db\u90bb\u6e85\u5c04\uff0c\u9002\u5408\u6e05\u7406\u62b1\u56e2\u654c\u4eba\u3002'),
-    'tarjan': ('\u540c\u73af\u5171\u632f', '\u4e2d\u540e\u6392', '\u5f3a\u8fde\u901a\u5206\u91cf\u5185\u53cb\u519b\u4e92\u76f8\u62ac\u653b\u51fb\uff0c\u8d8a\u96c6\u4e2d\u8d8a\u5f3a\u3002'),
+    'ac_automaton': ('\u591a\u70b9\u6e85\u5c04', '\u4e2d\u540e\u6392', 'AC \u81ea\u52a8\u673a\u6cbf fail \u94fe\u4e00\u6b21\u626b\u63cf\u547d\u4e2d\u6240\u6709\u6a21\u5f0f\uff0c\u5bf9\u9762\u540c\u7c7b\u8d8a\u591a\u6536\u76ca\u8d8a\u9ad8\u3002'),
+    'tarjan': ('\u540c\u73af\u5171\u632f', '\u4e2d\u540e\u6392', '\u5f3a\u8fde\u901a\u5206\u91cf\u9760 lowlink \u6807\u8bb0\u4e92\u76f8\u53ef\u8fbe\u7684\u8282\u70b9\uff0c\u88ab\u6807\u8bb0\u7684\u76ee\u6807\u4f1a\u8d8a\u6765\u8d8a\u8106\u3002'),
     'minimax': ('\u6b8b\u8840\u7ffb\u76d8', '\u524d\u4e2d\u6392', '\u751f\u547d\u8dcc\u7834\u4e00\u534a\u540e\u653b\u51fb \xd71.6\uff0c\u9002\u5408\u9876\u5728\u524d\u6392\u6362\u8840\u3002'),
-    'suffix_array': ('\u7eb5\u5217\u7a7f\u900f', '\u4e2d\u540e\u6392', '\u9ad8\u9762\u677f\u7a7f\u900f\uff0c\u4e13\u6253\u524d\u540e\u91cd\u53e0\u7684\u53cc\u76ee\u6807\u3002'),
-    'splay': ('\u9ad8\u7eed\u822a\u524d\u6392', '\u524d\u6392', '\u9ad8\u653b\u8840\u914d\u5438\u8840\uff0c\u7ad9\u5f97\u4f4f\u624d\u6709\u8f93\u51fa\u3002'),
-    'network_flow': ('\u5168\u573a\u963b\u585e', '\u540e\u6392', '\u9ad8\u8d39\u4e3b\u52a8\uff0c\u5c04\u7a0b\u5185\u5168\u4f53\u505c\u653b\uff0c\u914d\u5408\u7206\u53d1\u6536\u573a\u3002'),
-    'fft': ('\u540c\u9891\u534f\u540c', '\u540e\u6392', '\u5c04\u7a0b 8\uff0c\u4e0e\u540c\u6d41\u6d3e\u4e00\u8d77\u4e0a\u573a\u65f6\u653b\u51fb\u8fdb\u4e00\u6b65\u653e\u5927\u3002'),
-    'suffix_automaton': ('\u7edd\u5883\u6536\u5272', '\u524d\u4e2d\u6392', '\u6700\u9ad8\u9762\u677f\u4e4b\u4e00\uff0c\u6b8b\u8840\u540e\u8fdb\u5165 \xd71.6 \u7684\u7ffb\u76d8\u533a\u95f4\u3002'),
+    'suffix_array': ('\u7eb5\u5217\u7a7f\u900f', '\u4e2d\u540e\u6392', '\u540e\u7f00\u6570\u7ec4\u9760 LCP \u8861\u91cf\u76f8\u90bb\u540e\u7f00\u7684\u76f8\u4f3c\u5ea6\uff0c\u53ea\u6253\u540c\u4e00\u7c7b\u76ee\u6807\u624d\u6709\u9ad8\u6536\u76ca\u3002'),
+    'splay': ('\u9ad8\u7eed\u822a\u524d\u6392', '\u524d\u6392', '\u4f38\u5c55\u6811\u6bcf\u6b21\u8bbf\u95ee\u90fd\u628a\u8282\u70b9\u65cb\u5230\u6839\uff0c\u8d8a\u6253\u8d8a\u987a\uff1b\u4e00\u65e6\u88ab\u96c6\u706b\uff0c\u65cb\u8f6c\u5c42\u6570\u7acb\u523b\u6298\u534a\u3002'),
+    'network_flow': ('\u5168\u573a\u963b\u585e', '\u540e\u6392', '\u6700\u5927\u6d41\u53d7\u9650\u4e8e\u6700\u5c0f\u5272\uff0c\u6d41\u91cf\u88ab\u591a\u6761\u8fb9\u5206\u644a\uff0c\u4f18\u5148\u5272\u65ad\u5bb9\u91cf\u6700\u5927\u7684\u90a3\u4e00\u8def\u3002'),
+    'fft': ('\u540c\u9891\u534f\u540c', '\u540e\u6392', '\u8776\u5f62\u8fd0\u7b97\u628a\u65f6\u57df\u62c6\u6210\u5947\u5076\u4e24\u8def\u518d\u5408\u5e76\uff0c\u7b2c\u4e00\u62cd\u5f31\u3001\u7b2c\u4e8c\u62cd\u5f3a\uff0c\u5747\u503c\u7565\u9ad8\u4e8e\u666e\u901a\u5361\u3002'),
+    'suffix_automaton': ('\u7edd\u5883\u6536\u5272', '\u524d\u4e2d\u6392', '\u540e\u7f00\u81ea\u52a8\u673a\u7528\u6700\u5c11\u72b6\u6001\u5b58\u4e0b\u6240\u6709\u5b50\u4e32\uff0c\u4ee3\u4ef7\u662f\u6781\u4f4e\u7684\u6709\u6548\u751f\u547d\uff1a\u5806\u540c\u540d\u8d8a\u591a\u8d8a\u8106\u3002'),
 })
 
 for _card in CARDS:
@@ -306,6 +344,33 @@ TRAITS = {
     'geometry': '\u8ba1\u7b97\u51e0\u4f55', 'math': '\u6570\u5b66', 'optimization': '\u4f18\u5316',
     'graph_theory': '\u56fe\u8bba', 'string': '\u5b57\u7b26\u4e32', 'game_theory': '\u535a\u5f08',
 }
+
+
+
+def bond_tier(count):
+    tier = 0
+    for need in BOND_TIERS:
+        if count >= need:
+            tier += 1
+    return tier
+
+
+def bond_status(cards):
+    # Trait counts for one player's board, with active tiers.
+    counts = {}
+    for c in cards:
+        t = c['trait']
+        counts[t] = counts.get(t, 0) + 1
+    rows = []
+    for trait, count in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0])):
+        tier = bond_tier(count)
+        rows.append({
+            'trait': trait, 'name': TRAITS.get(trait, trait),
+            'count': count, 'tier': tier,
+            'next': BOND_TIERS[tier] if tier < len(BOND_TIERS) else None,
+            'effects': list(BOND_EFFECTS[:tier]),
+        })
+    return rows
 
 DATA_LOCK = threading.RLock()
 PROFILES = {}
@@ -1169,6 +1234,7 @@ class Room:
             'shield': 0.0, 'stacks': 0, 'hits': 0, 'charge': 0, 'kills': min(GENETIC_CAP, int(info.get('kills', 0))) if skill == 'genetic' else 0,
             'outMult': stats[owner]['out'], 'inMult': stats[owner]['in'],
             'swap': [], 'delayed': [],
+            'lastCard': '', 'mark': 0, 'mstGuard': 0.0,
         }
 
     @staticmethod
@@ -1189,6 +1255,50 @@ class Room:
         return self._attack_speed_aura(u, units) * slow
 
     def _apply_spawn_passives(self, units):
+        # ---- Global bonds: every (owner, trait) group of 2/4/6 units ----
+        # unlocks one tier. Effects are deliberately small so the whole pool
+        # stays balanced; all units of both sides are treated identically.
+        group = {}
+        for u in units:
+            k = (u['owner'], u['trait'])
+            group[k] = group.get(k, 0) + 1
+        for u in units:
+            tier = bond_tier(group[(u['owner'], u['trait'])])
+            if tier <= 0:
+                continue
+            u['bondTier'] = tier
+            u['atk'] = u['baseAtk'] = u['baseAtk'] * (1.0 + BOND_ATK_STEP)
+            if tier >= 3:
+                u['inMult'] = u['inMult'] * (1.0 - BOND_GUARD_STEP)
+            if tier >= 2:
+                # Keep HP integral: a fractional maxHp would make a living
+                # 0.x-HP unit serialize as hp=0 in the replay frames.
+                u['maxHp'] = float(int(u['maxHp'] * (1.0 + BOND_HP_STEP)))
+                u['hp'] = min(u['maxHp'], float(int(u['hp'] * (1.0 + BOND_HP_STEP))))
+        # ---- SAM state compression: same-card allies trade HP for attack ----
+        same = {}
+        for u in units:
+            k = (u['owner'], u['card'])
+            same[k] = same.get(k, 0) + 1
+        for u in units:
+            if u['skill'] != 'sam_compress':
+                continue
+            n = min(SAM_CAP, max(0, same[(u['owner'], u['card'])] - 1))
+            # A lone state still compresses its own suffix, so it gains the
+            # attack bonus without paying the space cost; the HP penalty
+            # only applies once there are states to merge with.
+            u['atk'] = u['baseAtk'] = u['baseAtk'] * (1.0 + SAM_ATK_STEP * (n + 1))
+            if n > 0:
+                u['maxHp'] = float(max(1, int(u['maxHp'] * (1.0 - SAM_HP_STEP * n))))
+                u['hp'] = min(u['maxHp'], float(int(u['hp'])))
+        # ---- MST links: each orthogonal ally is one edge of damage share ---
+        for u in units:
+            if u['skill'] != 'mst_link':
+                continue
+            links = sum(1 for o in units
+                        if o is not u and o['hp'] > 0
+                        and o['owner'] == u['owner'] and self._dist(u, o) == 1)
+            u['mstGuard'] = min(MST_GUARD_CAP, links) * MST_GUARD_STEP
         # \u5408\u5e76\u8fb9\u53ea\u7531\u5f52\u5e76\u6392\u5e8f\u8fde\u63a5\u81ea\u5df1\u4e0e\u6b63\u4ea4\u90bb\u5c45\uff1b\u8fde\u901a\u7ec4\u540c\u6b65\u5747\u5206\uff0c\u6d88\u9664\u904d\u5386\u987a\u5e8f\u5dee\u5f02\u3002
         unseen = {u['uid']: u for u in units}
         edges = {u['uid']: set() for u in units}
@@ -1198,15 +1308,6 @@ class Room:
                     if o is not u and o['owner'] == u['owner'] and self._dist(u, o) == 1:
                         edges[u['uid']].add(o['uid'])
                         edges[o['uid']].add(u['uid'])
-        for u in units:
-            if u['skill'] == 'synergy':
-                peers = sum(1 for o in units
-                            if o is not u and o['hp'] > 0
-                            and o['owner'] == u['owner']
-                            and o['trait'] == u['trait'])
-                if peers:
-                    gain = 1.0 + SYNERGY_STEP * min(SYNERGY_CAP, peers)
-                    u['atk'] = u['baseAtk'] = u['atk'] * gain
         while unseen:
             key = next(iter(unseen))
             group, todo = [], [key]
@@ -1258,12 +1359,16 @@ class Room:
             return min(enemies, key=lambda e: (e['hp'], self._dist(u, e)))
         if sk == 'sliding_max':
             return min(enemies, key=lambda e: (-e['atk'], self._dist(u, e)))
+        if sk == 'heuristic':
+            return min(enemies, key=lambda e: (self._dist(u, e) + e['hp'] / max(1.0, e['atk']), self._dist(u, e)))
         return min(enemies, key=lambda e: (self._dist(u, e), e['hp']))
 
     def _deal_damage(self, target, raw, events, t, units, by_uid,
                      source=None, is_attack=False, allow_react=True):
         if target['hp'] <= 0:
             return 0
+        raw = raw * (1.0 - target.get('mstGuard', 0.0)) \
+              * (1.0 + SCC_MARK_STEP * min(SCC_MARK_CAP, target.get('mark', 0)))
         dmg = max(1, int(raw * target['inMult']))
         pending_shield = 0
 
@@ -1321,6 +1426,8 @@ class Room:
             target['hp'] -= dealt
             if target['hp'] <= 0 and source is not None and source.get('skill') == 'genetic':
                 source['kills'] = min(GENETIC_CAP, source['kills'] + 1)
+        if dealt > 0 and target.get('skill') == 'splay_rotate':
+            target['stacks'] = int(target.get('stacks', 0) // 2)
 
         if pending_shield > 0 and target['hp'] > 0:
             old_shield = target['shield']
@@ -1342,6 +1449,8 @@ class Room:
     def _attack_multiplier(self, u, target, units, t, round_no):
         base = u['atk'] * DMG_MULT * u['outMult']
         sk = u['skill']
+        u['hits'] = u.get('hits', 0) + 1
+        h = u['hits']
         if sk == 'spfa_stall':
             base *= SPFA_DAMAGE_MULT
         elif sk == 'prime_round':
@@ -1356,7 +1465,6 @@ class Room:
         elif sk == 'genetic':
             base *= 1.0 + GENETIC_STEP * min(GENETIC_CAP, u['kills'])
         elif sk == 'every_n':
-            u['hits'] += 1
             if u['hits'] % EVERY_N_STEPS == 0:
                 base *= EVERY_N_MULT
         elif sk == 'charge_burst':
@@ -1372,6 +1480,22 @@ class Room:
                        and abs(e['x'] - target['x']) <= 1 and abs(e['y'] - target['y']) <= 1)
             if near >= 3:
                 base *= 2.0
+        elif sk == 'prefix_growth':
+            base *= 1.0 + PREFIX_GROWTH_STEP * min(PREFIX_GROWTH_CAP, h - 1)
+        elif sk == 'fft_butterfly':
+            base *= FFT_EVEN_MULT if h % 2 == 0 else FFT_ODD_MULT
+        elif sk == 'kmp_next':
+            base *= 1.0 + KMP_NEXT_STEP * min(KMP_NEXT_CAP, u.get('charge', 0))
+        elif sk == 'lcp_chain':
+            base *= LCP_SAME_MULT if u.get('lastCard', '') == target['card'] else LCP_OTHER_MULT
+        elif sk == 'heuristic':
+            base *= HEURISTIC_MULT
+        elif sk == 'mod_cycle':
+            phase = (h - 1) % MOD_CYCLE
+            base *= MOD_CYCLE_BURST if phase == MOD_CYCLE - 1 \
+                else max(0.4, MOD_CYCLE_START - MOD_CYCLE_STEP * phase)
+        elif sk == 'splay_rotate':
+            base *= 1.0 + SPLAY_STEP * min(SPLAY_CAP, u.get('stacks', 0))
         if sk == 'rampage' and u['hp'] < u['maxHp'] * RAMPAGE_HP:
             base *= RAMPAGE_MULT
         return base
@@ -1380,6 +1504,7 @@ class Room:
         if u['skill'] == 'o2_aura':
             return
         raw = self._attack_multiplier(u, target, units, t, round_no)
+        h = u.get('hits', 0)
         dealt = self._deal_damage(target, raw, events, t, units, by_uid,
                                   source=u, is_attack=True)
         events.append({'t': round(t, 6), 'type': 'attack',
@@ -1390,6 +1515,43 @@ class Room:
         self._notify_ally_action(u, units)
 
         sk = u['skill']
+        # ---- unique-skill post-hit hooks (all produce real damage events) ---
+        if sk == 'seg_query' and h % SEG_QUERY_STEPS == 0:
+            for e in units:
+                if e['hp'] <= 0 or e['owner'] == u['owner'] or e is target \
+                        or self._dist(u, e) > u['range']:
+                    continue
+                dmg = self._deal_damage(e, raw * SEG_QUERY_RATIO, events, t,
+                                        units, by_uid, source=u)
+                events.append({'t': round(t, 6), 'type': 'attack',
+                               'fromX': int(u['x']), 'fromY': int(u['y']),
+                               'toX': int(e['x']), 'toY': int(e['y']),
+                               'dmg': dmg, 'owner': u['owner'], 'skill': True,
+                               'skillId': 'seg_query', 'sourceUid': u['uid'],
+                               'targetUid': e['uid']})
+        elif sk == 'multi_match':
+            for e in units:
+                if e['hp'] <= 0 or e['owner'] == u['owner'] or e is target \
+                        or e['card'] != target['card'] \
+                        or self._dist(u, e) > u['range']:
+                    continue
+                dmg = self._deal_damage(e, raw * MULTI_MATCH_RATIO, events, t,
+                                        units, by_uid, source=u)
+                events.append({'t': round(t, 6), 'type': 'attack',
+                               'fromX': int(u['x']), 'fromY': int(u['y']),
+                               'toX': int(e['x']), 'toY': int(e['y']),
+                               'dmg': dmg, 'owner': u['owner'], 'skill': True,
+                               'skillId': 'multi_match', 'sourceUid': u['uid'],
+                               'targetUid': e['uid']})
+        if sk == 'scc_mark':
+            target['mark'] = min(SCC_MARK_CAP, target.get('mark', 0) + 1)
+        if sk == 'lcp_chain':
+            u['lastCard'] = target['card']
+        if sk == 'kmp_next':
+            u['charge'] = 0 if target['hp'] <= 0 \
+                else min(KMP_NEXT_CAP, u.get('charge', 0) + 1)
+        if sk == 'splay_rotate':
+            u['stacks'] = min(SPLAY_CAP, u.get('stacks', 0) + 1)
         if sk == 'pierce':
             dy = 1 if target['y'] >= u['y'] else -1
             back = [e for e in units
@@ -1540,6 +1702,14 @@ class Room:
             for e in enemies:
                 hit(e, FREEZE_RATIO)
                 e['stallUntil'] = max(e['stallUntil'], t + FREEZE_STALL)
+        elif sk == 'min_cut':
+            n = max(1, len(enemies))
+            ratio = MIN_CUT_RATIO / (1.0 + MIN_CUT_SPREAD * (n - 1))
+            boss = max(enemies, key=lambda e: e['hp']) if enemies else None
+            for e in enemies:
+                hit(e, ratio)
+            if boss is not None and boss['hp'] > 0:
+                hit(boss, MIN_CUT_BOSS_RATIO / (1.0 + MIN_CUT_BOSS_SPREAD * (n - 1)))
 
     def _simulate_battle(self, a, b, round_no, record=True):
         stats = {}
@@ -1809,6 +1979,16 @@ class Room:
                 'lastResult': p['lastResult'],
                 'roundWins': p['roundWins'], 'roundLosses': p['roundLosses']}
 
+    def _bond_view(self, viewer_id):
+        if not viewer_id or viewer_id not in self.players:
+            return []
+        cards = []
+        for info in self.players[viewer_id]['board'].values():
+            c = CARD_BY_ID.get(info['card'])
+            if c:
+                cards.append(c)
+        return bond_status(cards)
+
     def get_state(self, viewer_id=None, have_chat=-1, since=-1):
         with self.lock:
             if viewer_id:
@@ -1863,6 +2043,9 @@ class Room:
                 'halfW': HALF_W, 'halfH': HALF_H,
                 'battleW': BATTLE_W, 'battleH': BATTLE_H,
                 'maxRounds': MAX_ROUNDS, 'maxPlayers': MAX_PLAYERS,
+                'maxBoard': MAX_BOARD, 'maxBench': MAX_BENCH,
+                'bonds': self._bond_view(viewer_id),
+                'bondTiers': list(BOND_TIERS), 'bondEffects': list(BOND_EFFECTS),
             }
             if have_chat != self.chat_version:
                 out['chat'] = self.chat
@@ -2184,7 +2367,10 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return self._json(get_profile(cid))
         if path == '/api/cards':
             return self._json({'cards': CARDS, 'traits': TRAITS,
-                               'starScale': STAR_SCALE, 'maxStar': MAX_STAR})
+                               'starScale': STAR_SCALE, 'maxStar': MAX_STAR,
+                               'bondTiers': list(BOND_TIERS),
+                               'bondEffects': list(BOND_EFFECTS),
+                               'maxBoard': MAX_BOARD, 'maxBench': MAX_BENCH})
         return self._json({'error': f'not found: {path}'}, 404)
 
     def do_POST(self):

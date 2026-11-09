@@ -1,5 +1,5 @@
 {
-  "passed": 519,
+  "passed": 530,
   "cards": 50,
   "checks": [
     "linear_dp active flag",
@@ -165,7 +165,6 @@
     "matrix_pow damage multiplier",
     "genetic damage multiplier",
     "monotonic_stack burst cadence",
-    "segment_tree burst cadence",
     "mod_op burst cadence",
     "CDQ exact 10s threshold",
     "matrix max growth",
@@ -520,6 +519,18 @@
     "global damage floor (40, 1)",
     "global damage floor (40, 1.1)",
     "global damage floor (40.9, 1)",
-    "global damage floor (1.1, 0.5)"
+    "global damage floor (1.1, 0.5)",
+    "every one of the 50 cards has a distinct skill",
+    "board cap raised to 20, bench stays 10",
+    "bond thresholds are 2 / 4 / 6",
+    "bond_tier boundary values",
+    "bond_status reports count/tier/next",
+    "tier 1 grants exactly one effect",
+    "two same-trait allies trigger the tier-1 attack bond",
+    "enemy units never count toward your bond",
+    "six same-trait units reach tier 3",
+    "tier 3 reduces damage taken",
+    "tier 2+ raises max HP by an integer amount",
+    "bond HP stays integral so no living unit shows 0 HP"
   ]
 }
