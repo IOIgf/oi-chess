@@ -1,0 +1,10 @@
+{
+  "seed": 20261117,
+  "pure_battles": 19040,
+  "mixed_battles": 7000,
+  "diverse_battles": 7000,
+  "total": 33040,
+  "trials": 32,
+  "mixed_trials": 200,
+  "source_sha256": "689e657a380c477504d8b02b69986031e6712a1b10792e29b987d9ff6d7c500c"
+}

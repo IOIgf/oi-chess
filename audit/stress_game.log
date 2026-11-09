@@ -1,0 +1,6 @@
+  R1: 存活 8 场配对 4 轮空 [] OK
+  R2: 存活 8 场配对 4 轮空 [] OK
+  R3: 存活 8 场配对 4 轮空 [] OK
+对局结束，winner = stress5
+最终: {'stress0': (75, 22, 92, False), 'stress1': (42, 22, 76, False), 'stress2': (53, 22, 84, False), 'stress3': (65, 22, 89, False), 'stress4': (60, 22, 89, False), 'stress5': (100, 22, 100, False), 'stress6': (77, 22, 97, False), 'stress7': (86, 22, 100, False)}
+共 528 次操作；数值越界 0 条；配对小轮 []

@@ -1,0 +1,37 @@
+{
+  "cases": [
+    {
+      "case": "initial placement",
+      "worst_error_px": 0
+    },
+    {
+      "case": "resize 1000x700",
+      "worst_error_px": 0
+    },
+    {
+      "case": "resize 390x844",
+      "worst_error_px": 0
+    },
+    {
+      "case": "resize 844x390",
+      "worst_error_px": 0
+    },
+    {
+      "case": "resize 1440x960",
+      "worst_error_px": 0
+    },
+    {
+      "case": "125 percent zoom",
+      "worst_error_px": 0
+    },
+    {
+      "case": "layout changes without data update",
+      "worst_error_px": 0
+    },
+    {
+      "case": "place after layout change",
+      "worst_error_px": 0
+    }
+  ],
+  "errors": []
+}

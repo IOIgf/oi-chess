@@ -1,0 +1,1 @@
+PASS FX audit {"desktop": {"median_ms": 16.699999999999818, "p95_ms": 16.800000000000182, "nodes": 6}, "budgets": {"clear": 128, "low": 40}, "duplicate_events": 2, "errors": []}

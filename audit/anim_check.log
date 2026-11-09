@@ -1,0 +1,7 @@
+房间 345c85
+HTTP 400 b'{"error": "\xe6\x97\xa0\xe6\x95\x88\xe4\xbd\x8d\xe7\xbd\xae"}'
+HTTP 400 b'{"error": "\xe6\x97\xa0\xe6\x95\x88\xe4\xbd\x8d\xe7\xbd\xae"}'
+回放帧 0→27  rAF True  平滑位移的棋子 0  截图 10 张
+棋子 9 血条 9 异常 []
+控制台错误 0 | 位移棋子 0
+动画回归: PASS

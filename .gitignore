@@ -1,0 +1,13 @@
+# Runtime data and caches
+data/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+tests/shots/
+
+# Test-generated screenshots (also excluded by tools/make_release.py)
+audit/fx/*.png
+audit/placement/*.png
+
+# Generated release archives
+*.zip

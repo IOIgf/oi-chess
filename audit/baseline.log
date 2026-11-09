@@ -1,0 +1,71 @@
+pure linear_dp 544
+pure tree_array 1072
+pure monotonic_stack 1584
+pure greedy 2080
+pure sort 2560
+pure dfs 3024
+pure diff 3472
+pure xor 3904
+pure gcd 4320
+pure bfs 4720
+pure pigeonhole 5104
+pure prime_sieve 5472
+pure mod_op 5824
+pure shift 6160
+pure range_dp 6480
+pure segment_tree 6784
+pure sqrt_block 7072
+pure pruning 7344
+pure ids 7600
+pure merge_sort 7840
+pure quick_sort 8064
+pure divide 8272
+pure inverse 8464
+pure bitmask_dp 8640
+pure monotonic_queue 8800
+pure a_star 8944
+pure bidirectional 9072
+pure fermat 9184
+pure expectation 9280
+pure sweep_line 9360
+pure cdq 9424
+pure spfa 9472
+pure o2 9504
+pure genetic 9520
+pure matrix_pow 9520
+mixed linear_dp
+mixed tree_array
+mixed monotonic_stack
+mixed greedy
+mixed sort
+mixed dfs
+mixed diff
+mixed xor
+mixed gcd
+mixed bfs
+mixed pigeonhole
+mixed prime_sieve
+mixed mod_op
+mixed shift
+mixed range_dp
+mixed segment_tree
+mixed sqrt_block
+mixed pruning
+mixed ids
+mixed merge_sort
+mixed quick_sort
+mixed divide
+mixed inverse
+mixed bitmask_dp
+mixed monotonic_queue
+mixed a_star
+mixed bidirectional
+mixed fermat
+mixed expectation
+mixed sweep_line
+mixed cdq
+mixed spfa
+mixed o2
+mixed genetic
+mixed matrix_pow
+DONE /home/user/oi-chess/audit/baseline

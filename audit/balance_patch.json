@@ -1,0 +1,11 @@
+{
+  "diff": {"attack": 35, "hp": 335},
+  "xor": {"attack": 28, "hp": 280},
+  "quick_sort": {"attack": 60, "hp": 590},
+  "ids": {"attack": 76, "hp": 750},
+  "bidirectional": {"attack": 86, "hp": 840},
+  "sweep_line": {"attack": 94, "hp": 920},
+  "spfa": {"hp": 1000},
+  "bitmask_dp": {"attack": 79, "hp": 800},
+  "a_star": {"attack": 110, "hp": 1100}
+}
