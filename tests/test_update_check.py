@@ -111,6 +111,63 @@ with patch.object(u, 'check', return_value=fake):
 ok(rc == 0 and '发现新版本' in text and 'https://example/z.zip' in text,
    'human-readable output shows version and download link')
 
+# ---- 代理选择：环境变量解析 / 传递 / CLI 覆盖 ----
+ok(u.resolve_proxy(None) is None, 'unset proxy env means direct connection')
+ok(u.resolve_proxy('') is None, 'empty proxy env means direct connection')
+for off in ('0', 'no', 'none', 'direct', 'off', 'DIRECT'):
+    ok(u.resolve_proxy(off) is None, 'proxy off value %r means direct' % off)
+ok(u.resolve_proxy(' http://127.0.0.1:7890 ') == 'http://127.0.0.1:7890',
+   'proxy URL is stripped of whitespace')
+
+seen = []
+with patch.dict(os.environ, {u.PROXY_ENV: 'http://127.0.0.1:7890'}):
+    with patch.object(u, 'fetch_latest',
+                      lambda t, proxy=None: seen.append((t, proxy))
+                      or {'tag_name': tag, 'html_url': 'x'}):
+        r = u.check(root=R)
+ok(seen == [(u.DEFAULT_TIMEOUT, 'http://127.0.0.1:7890')],
+   'proxy env is resolved and passed to fetch_latest')
+ok(r['status'] == 'latest' and r['proxy'] == 'http://127.0.0.1:7890',
+   'latest result reports the proxy in use')
+
+with patch.dict(os.environ, {u.PROXY_ENV: ''}):
+    seen.clear()
+    with patch.object(u, 'fetch_latest',
+                      lambda t, proxy=None: seen.append((t, proxy))
+                      or {'tag_name': tag, 'html_url': 'x'}):
+        u.check(root=R)
+ok(seen == [(u.DEFAULT_TIMEOUT, None)],
+   'empty proxy env still means direct connection')
+
+# 注入 fetch 不受代理影响；显式 proxy= 直连时不读环境变量
+seen.clear()
+with patch.dict(os.environ, {u.PROXY_ENV: 'http://127.0.0.1:7890'}):
+    u.check(root=R, timeout=1, fetch=lambda t: seen.append(t)
+            or {'tag_name': tag, 'html_url': 'x'})
+ok(seen == [1], 'injected fetch keeps its single-arg contract')
+
+seen.clear()
+with patch.dict(os.environ, {u.PROXY_ENV: 'http://127.0.0.1:7890'}):
+    with patch.object(u, 'fetch_latest',
+                      lambda t, proxy=None: seen.append((t, proxy))
+                      or {'tag_name': tag, 'html_url': 'x'}):
+        u.check(root=R, proxy=None)
+ok(seen == [(u.DEFAULT_TIMEOUT, None)],
+   'explicit proxy=None overrides the env (direct connection)')
+
+captured = {}
+with patch.object(u, 'check',
+                  lambda **kw: captured.update(kw)
+                  or {'status': 'latest', 'local': tag, 'remote': tag}):
+    rc = u.main(['--proxy', 'http://127.0.0.1:7890'])
+ok(rc == 0 and captured.get('proxy') == 'http://127.0.0.1:7890',
+   '--proxy flag reaches check')
+with patch.object(u, 'check',
+                  lambda **kw: captured.update(kw)
+                  or {'status': 'latest', 'local': tag, 'remote': tag}):
+    u.main(['--proxy'])
+ok(captured.get('proxy') is None, '--proxy without a value forces direct')
+
 # ---- 启动器：先检查再起服务，且保持 ASCII-only ----
 bat = (R / 'start.bat').read_bytes()
 ok(bat.isascii(), 'start.bat stays ASCII-only')
@@ -119,6 +176,12 @@ ok(s.index('check_update.py') < s.index('server.py'),
    'update check runs before the server starts')
 ok(s.count('check_update.py') == 2, 'both py and python branches check for updates')
 ok((R / 'check_update.py').is_file(), 'check_update.py ships with the project')
+ok('update_config.bat' in s, 'start.bat persists the proxy choice to update_config.bat')
+ok('setup' in s and 'askproxy' in s, 'start.bat setup re-asks the proxy choice')
+ok('OI_CHESS_PROXY' in s, 'start.bat exports OI_CHESS_PROXY from the saved choice')
+ok(u.PROXY_ENV in (R / '.gitignore').read_text('utf-8').replace('OI_CHESS_PROXY',
+   'OI_CHESS_PROXY') or 'update_config.bat' in (R / '.gitignore').read_text('utf-8'),
+   'update_config.bat is git-ignored (local machine state)')
 
 # ---- 发布闸门与清单同步 ----
 manifest = json.loads((R / '版本清单.json').read_text('utf-8'))

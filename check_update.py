@@ -11,9 +11,13 @@
 可用环境变量：
   OI_CHESS_SKIP_UPDATE=1        完全跳过检查
   OI_CHESS_UPDATE_TIMEOUT=2.5   网络超时秒数
+  OI_CHESS_PROXY=http://...     走代理访问 GitHub；空 / 0 / none / direct = 直连
 命令行：
   py -3 check_update.py          人类可读输出
   py -3 check_update.py --json   机器可读输出（供自动化/前端复用）
+  py -3 check_update.py --proxy URL   本次检查强制走指定代理
+代理选择：start.bat 首次启动会询问一次并保存到 update_config.bat，
+之后每次启动自动读取；重新选择请运行 start.bat setup 或直接删除该文件。
 """
 import json
 import os
@@ -29,9 +33,14 @@ RELEASE_PAGE = 'https://github.com/%s/releases/latest' % REPO
 
 SKIP_ENV = 'OI_CHESS_SKIP_UPDATE'
 TIMEOUT_ENV = 'OI_CHESS_UPDATE_TIMEOUT'
+PROXY_ENV = 'OI_CHESS_PROXY'
 DEFAULT_TIMEOUT = 2.5
 # index.html 缺失时的兜底值；发布新版本时必须与 index.html 的 meta 一起更新。
-FALLBACK_TAG = 'v1.7.0-bonds-skills'
+FALLBACK_TAG = 'v1.7.1-proxy-choice'
+# 这些取值（忽略大小写）表示「直连，不走代理」。
+PROXY_OFF = ('', '0', 'no', 'none', 'direct', 'off')
+# check(proxy=...) 的哨兵：None 表示显式直连，_ENV 表示读环境变量。
+_ENV = object()
 
 META_RE = re.compile(r'<meta\s+name="oi-chess-release"\s+content="([^"]+)"')
 
@@ -63,20 +72,40 @@ def has_update(local, remote):
     return version_key(remote) > version_key(local)
 
 
-def fetch_latest(timeout=DEFAULT_TIMEOUT):
+def resolve_proxy(raw=None):
+    """OI_CHESS_PROXY 取值 -> 代理 URL 或 None（直连）。
+
+    None 参数表示读环境变量；空 / 0 / no / none / direct / off 一律直连。
+    """
+    if raw is None:
+        raw = os.environ.get(PROXY_ENV, '')
+    raw = (raw or '').strip()
+    if raw.lower() in PROXY_OFF:
+        return None
+    return raw or None
+
+
+def fetch_latest(timeout=DEFAULT_TIMEOUT, proxy=None):
     req = urllib.request.Request(API, headers={
         'Accept': 'application/vnd.github+json',
         'User-Agent': 'oi-chess-update-check',
     })
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
+    if proxy:
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({
+            'http': proxy, 'https': proxy}))
+        resp = opener.open(req, timeout=timeout)
+    else:
+        resp = urllib.request.urlopen(req, timeout=timeout)
+    with resp:
         return json.load(resp)
 
 
-def check(root=R, timeout=None, fetch=None):
+def check(root=R, timeout=None, fetch=None, proxy=_ENV):
     """返回状态字典，永不抛异常。
 
     status: 'update' | 'latest' | 'skipped' | 'offline'
     fetch 参数用于测试注入，避免单测依赖外网。
+    proxy 为 None 表示显式直连；不传则读 OI_CHESS_PROXY。
     """
     local = local_tag(root)
     if os.environ.get(SKIP_ENV) == '1':
@@ -86,8 +115,13 @@ def check(root=R, timeout=None, fetch=None):
             timeout = float(os.environ.get(TIMEOUT_ENV, DEFAULT_TIMEOUT))
         except (TypeError, ValueError):
             timeout = DEFAULT_TIMEOUT
+    if proxy is _ENV:
+        proxy = resolve_proxy()
     try:
-        data = (fetch or fetch_latest)(timeout)
+        if fetch is None:
+            def fetch(t, _proxy=proxy):
+                return fetch_latest(t, proxy=_proxy)
+        data = fetch(timeout)
         remote = data['tag_name']
         if not isinstance(remote, str) or not remote:
             raise ValueError('bad tag_name')
@@ -98,16 +132,22 @@ def check(root=R, timeout=None, fetch=None):
         if has_update(local, remote):
             return {'status': 'update', 'local': local, 'remote': remote,
                     'url': url, 'download': download,
-                    'name': data.get('name') or remote}
-        return {'status': 'latest', 'local': local, 'remote': remote}
+                    'name': data.get('name') or remote, 'proxy': proxy}
+        return {'status': 'latest', 'local': local, 'remote': remote,
+                'proxy': proxy}
     except Exception:
         # 离线、DNS 失败、超时、限流、JSON 损坏、字段缺失：一律静默跳过。
-        return {'status': 'offline', 'local': local}
+        return {'status': 'offline', 'local': local, 'proxy': proxy}
 
 
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
-    result = check()
+    proxy = _ENV
+    if '--proxy' in argv:
+        i = argv.index('--proxy')
+        # --proxy 后面没有值时视为显式直连，避免误用环境变量。
+        proxy = argv[i + 1] if i + 1 < len(argv) else None
+    result = check(proxy=proxy)
     if '--json' in argv:
         print(json.dumps(result, ensure_ascii=True))
         return 0
@@ -129,7 +169,13 @@ def main(argv=None):
     elif st == 'skipped':
         print('检查更新：已跳过（%s=1）' % SKIP_ENV)
     else:
-        print('检查更新：跳过（离线或超时，不影响启动）')
+        if result.get('proxy'):
+            print('检查更新：跳过（代理 %s 连接失败或超时，不影响启动）'
+                  % result['proxy'])
+        else:
+            print('检查更新：跳过（离线或超时，不影响启动）')
+            print('提示：GitHub 连不上时可运行 start.bat setup 选择代理，'
+                  '或 set %s=http://127.0.0.1:7890' % PROXY_ENV)
     return 0
 
 

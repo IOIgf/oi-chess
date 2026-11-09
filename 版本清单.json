@@ -1,7 +1,7 @@
 {
-  "release": "最新版（50 张卡 = 50 种独立技能 + 全局羁绊机制 + 场上上限 20 + 负面技能平衡 + 启动前检查更新 + 商店升星保底 + 按等级解锁卡池 + 状态轮询瘦响应 + 半屏布局遮挡修复 + 可复现性校验 + Windows 编码修复）",
-  "build": "bonds-1",
-  "release_tag": "v1.7.0-bonds-skills",
+  "release": "最新版（50 张卡 = 50 种独立技能 + 全局羁绊机制 + 场上上限 20 + 负面技能平衡 + 启动前检查更新（代理可选） + 商店升星保底 + 按等级解锁卡池 + 状态轮询瘦响应 + 半屏布局遮挡修复 + 可复现性校验 + Windows 编码修复）",
+  "build": "proxy-1",
+  "release_tag": "v1.7.1-proxy-choice",
   "entrypoint": "start.bat（启动前检查更新）/ py -3 server.py",
   "server_ascii_only": true,
   "current_cards": {
@@ -18,8 +18,8 @@
     }
   },
   "files": {
-    ".gitignore": "5c01c52b57f7c4b2f67f4937861c976cd5b4df6e505d4ea96e183cb3de828105",
-    "README.md": "ac7f81b2f0263b6eefa7e65daf76ef43a94b7cf9b4c459e767f06a9e3870c7fb",
+    ".gitignore": "5facfc65aa0a49672f7dcfe0ecea053d407b542cb92f3503e256841f9637859a",
+    "README.md": "2308fb325d7827fd9e82ec2b388c3b9ac22c7916b60b48e4ee365dddc6066948",
     "audit/anim_check.log": "331c97a41d128fb72a44b243da99696e166baf11bdcf0f470e7e23c617c59f13",
     "audit/api_fuzz.log": "55c433cf15bb74ff3a8d14f50e061e3996a8300d0b4ea4bd2c8c1c683830414a",
     "audit/balance_patch.json": "ec2237372f4a19702432500561dd3a7ef04c17b0293d59ab75a5d3e83d466b54",
@@ -41,7 +41,7 @@
     "audit/final.log": "2dc31c446b154b0da696d30a37b88cb296e188f5fa19abf91bcbb3003b2bb200",
     "audit/fx/results.json": "60c1b8171cbb09e1abfe95edda44796c9df2193e2b403ec6dd243dcdc4073cb2",
     "audit/fx_test.log": "85ab07cdda36dc46093da6344aea911db96a5412f8c1bc81413dfa5222c539f1",
-    "audit/invariants.json": "6ec836adbe6195913c15883207b9ccdf06f2625539def727d7e05df3d3f96a14",
+    "audit/invariants.json": "5c24f987de2b0dbb07485ebb9accb2505740f3006317c7a10a4181f7fecf6ed5",
     "audit/mechanics.log": "4e064f5b2270055ee50aeca8425eb4488c27295f6ee88822cd839ee113b3a5b4",
     "audit/o2_final.log": "338e8b30b6078794dcc1e8f21dcf9678df738fa3348cc75133f3f37c19a0c39f",
     "audit/o2_test.log": "92b5c9de7f1540da0b3e282c064b01fe3ccef6b9312b417ba94f42bb085f1c90",
@@ -60,7 +60,7 @@
     "balance/final.json": "862eb68b04d7652f41d253a17e01cd3b7fd19866e3096084d433676abb22d97b",
     "balance/mixed_map.json": "b7e4adefb00c1d21a96df596b082c446224d08dfc4054bdf5e9fb2652061c1be",
     "balance/o2_scenarios.json": "2060ff2d653f3cc59ac50b97ab8d076fbbbc958cc916fe45629acd3c963e692c",
-    "check_update.py": "5e6a311c35c481e3f9ed877c4cf33e701ec2645e3ba0f576d3d87c6a8131563c",
+    "check_update.py": "ed8c4fdc22acdca792e49e5fddc7612012850e332f8f68b1442f0d3ffcd5a6a7",
     "docs/O2优化卡片设计.md": "a6de2ce675f00c3d50cd1c4ddb4518a1f75190fab7e9b34afedd05105980d803",
     "docs/SPFA卡片设计.md": "562390b93e9cee14d54a086cdf1743a97c26234ff9a8a4ec3c59a375fb003e80",
     "docs/images/o2-card.png": "a88711dfe82c650713c51be6152d0a522fe137291a29e161b362fcd2805b8b50",
@@ -68,8 +68,8 @@
     "docs/历史介绍.txt": "9efba2fcdb1e731b7069caa38a31e4984808fb2914dc5ba03de6462b971c6336",
     "docs/放置错位修复.md": "95c626538734c4d477743c3e63de0b2402d3672d3a81c47742efcec451fdd0b8",
     "server.py": "c95fc3dc143d220180ab22287c1c104484cabb937d1faa8eca3eba180cfb6acc",
-    "start.bat": "1bfe3ef915b8e7c730259bd188748e60858a916cf5d13c74f3ff8e7d6080e4ec",
-    "static/index.html": "4960b968c5c5590e8a8f8f866b1f47bd059360de4559ea1f326ff8d01dca133b",
+    "start.bat": "da386ca346a347031c4bc778e1e0eeb3c7ea3613cb0f2e0f3dab8216551cd0f3",
+    "static/index.html": "9254ff8d02cbf53f4fa02e04cfeff1fbca43ba42a71e056eea343563e044d9bd",
     "static/script.js": "192d1052664217129519279db70a1dee8d1cb35643aa8c646270a436cbf74852",
     "static/style.css": "4f52cf590242df87b3a8ce5c474f33ca418cce764037f668b3a0e28a66068b14",
     "tests/anim_check.py": "f3f7077730a6980c8469ffe46e22141a1afa47f0d1d2d81ecf6e0ecb651c7f29",
@@ -92,7 +92,7 @@
     "tests/test_shop_pool.py": "683a2f095638cd0a405e57428771f5ee1730d8cc8f0e3f4027bf457bc8736227",
     "tests/test_spfa.py": "691c93862c1bd0a628fb5f0f8fb16e393e5faf1187d5372c5f02923f4d258f8a",
     "tests/test_state_delta.py": "4ce0c852138a9ff0614936b81c5d0dbc34b098a1261742b1c7fa655cd41bd898",
-    "tests/test_update_check.py": "5559ab2663f4e4a9410a1ad09261e79ecc60510f6c58a95729c7f1820434dfd9",
+    "tests/test_update_check.py": "a3f79758367b4234f5bed3e93f19727688698d3c864ae34ccb7c05464b53d85f",
     "tools/audit_report.py": "66cf2f9fa8cfa6b77d96ef2706cafecd24a3935571e76eb5ea15d31795c82add",
     "tools/balance_apply.py": "f9ada3446ac4d2b24df1d7fd60f6b86a25cf1042dfdbbde35dd7b2622e568a2e",
     "tools/balance_lab.py": "52dee3efe5ae75d17a48878330aee24c3cd3afcee927f96224253cf12ce54a9f",
@@ -100,7 +100,7 @@
     "tools/full_audit_lab.py": "2d4c1bcdf3067dcfce85c4a698f1906586bd6c0df82c214f9e6d429a6d72ee52",
     "tools/make_demo.py": "6396562477104c74f672b6e513aa6def2de166b0c5d483dd6bb60de096f70b88",
     "tools/make_effect_demo.py": "4013d0ee102bc82d869753569d001f4303a66028ccebe265c2cfe01160604931",
-    "tools/make_release.py": "e21ef69bdcf2ebbce32c607a529fa7596346c482180712a5e4e432e20782122a",
+    "tools/make_release.py": "39ad276006fdf840509a9048b7c56b8c2b6ea50c530afca2490ed69ba2c33116",
     "tools/mixed_check.py": "0405cd2461d69345ca42aa5c426fc7253d65dedcf0a9438f0e8411ba77b94a7c",
     "tools/o2_scenarios.py": "c86b65f66fd1a3fbe007c73f0f71881c08adbe30149cf7080a69ed237a08e5db",
     "全卡实战与定位.csv": "48e0b2d7ada2e06e0cf7743314faf103e0f43d63cde8fd6f274f8ec32455c7ea",
@@ -110,6 +110,6 @@
     "完整检查与平衡报告.md": "cd546de974d396030d6c9b9359dee098780680bd659daba17e4327412be9baa2",
     "机制核对表.csv": "eb0b0d0dfb68a9c6641c8ad5e15d5f02c3ee73c3bc046b325b111564b9deb99e",
     "特效预览.html": "e317e86b00fa5fd079215ced819b4eaaf6f78215d25ee525fe8a56557e39087e",
-    "运行与验证.md": "922884294e97d09fbdac81b5e2525d3424c36e074aa898c9dc9a6abe3c2ec7dd"
+    "运行与验证.md": "72aebf25ae4de55efc00dedb42acf6226166a2c2ca8a8c1ac9f41afa75a4427e"
   }
 }
