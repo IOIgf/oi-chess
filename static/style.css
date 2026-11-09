@@ -1011,3 +1011,23 @@ body {
 @media (prefers-reduced-motion: reduce) {
   .shop-card:hover:not(.disabled) { transform: none; }
 }
+
+/* ---------- v1.8.0 · AI 对战入口与「电脑」标签 ---------- */
+/* 本层只新增控件与标签，不改任何既有布局尺寸、网格模板与定位 */
+.ai-setup-row { display: flex; gap: 8px; }
+.ai-setup-row select { flex: 1; min-width: 0; }
+.ai-setup-row select, .ai-controls select {
+  padding: 10px 8px; background: var(--surface-2); color: var(--fg);
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  font-size: 12px; font-family: inherit; letter-spacing: 1px; outline: none;
+}
+.ai-setup-row select:focus, .ai-controls select:focus {
+  border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.ai-controls { display: inline-flex; align-items: center; gap: 8px; }
+.ai-tag {
+  display: inline-block; padding: 1px 6px; font-size: 9px; line-height: 1.5;
+  color: var(--accent); background: var(--accent-soft);
+  border: 1px solid var(--accent); border-radius: 3px;
+  letter-spacing: 1px; vertical-align: middle; white-space: nowrap;
+}

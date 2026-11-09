@@ -458,18 +458,34 @@ window.addEventListener('orientationchange', scheduleFit);
 // ============================================================
 async function createRoom() {
   const name = (document.getElementById('nickname').value || '选手').trim().slice(0, 12);
+  const aiCountEl = document.getElementById('aiCount');
+  const aiLevelEl = document.getElementById('aiLevel');
+  const aiCount = aiCountEl ? (parseInt(aiCountEl.value, 10) || 0) : 0;
+  const aiLevel = aiLevelEl ? (aiLevelEl.value || 'normal') : 'normal';
   try {
-    const d = await api('/api/rooms', 'POST', { clientId: state.clientId, name });
+    const d = await api('/api/rooms', 'POST', {
+      clientId: state.clientId, name, aiCount, aiLevel
+    });
     state.playerId = d.playerId;
     state.roomId = d.roomId;
     state.lastMergeNoticeId = null;
     state.mergeInit = false;
     state.nickname = name;
+    state.aiCount = d.aiCount || 0;
+    state.aiLevel = aiLevel;
+    const lobbyLevel = document.getElementById('lobbyAiLevel');
+    if (lobbyLevel) lobbyLevel.value = aiLevel;
     saveIdentity();
     if (d.rejoined) toast('已回到原房间');
+    else if (d.aiCount) toast(`已加入 ${d.aiCount} 个电脑对手`);
     showScreen('lobby');
     startPolling();
   } catch (e) { toast(e.message); }
+}
+async function addAi() {
+  const el = document.getElementById('lobbyAiLevel');
+  const level = el ? (el.value || 'normal') : 'normal';
+  if (await doAction('addAi', { level })) toast('已添加一名电脑对手');
 }
 async function showRoomList() {
   try {
@@ -483,7 +499,7 @@ async function showRoomList() {
       el.innerHTML = open.map(r => `
         <div class="room-item" onclick="joinRoom('${r.id}')">
           <div><div>${escapeHtml(r.host)}</div><div class="room-id">${r.id}</div></div>
-          <div>${r.players}/${r.max || 8}</div>
+          <div>${r.players}/${r.max || 8}${r.aiCount ? ` <span class="ai-tag">含 ${r.aiCount} 电脑</span>` : ''}</div>
         </div>`).join('');
     }
     el.classList.toggle('hidden');
@@ -861,9 +877,12 @@ function renderLobby(d) {
   const arr = Object.values(d.players);
   list.innerHTML = arr.map(p => `
     <div class="player-item">
-      <span>${colorDot(p.color)}${escapeHtml(p.name)}</span>
+      <span>${colorDot(p.color)}${escapeHtml(p.name)}${p.isAi ? ` <span class="ai-tag">电脑${p.aiLevel ? '·' + escapeHtml(p.aiLevel) : ''}</span>` : ''}</span>
       ${p.id === d.host ? '<span class="host-tag">房主</span>' : ''}
     </div>`).join('');
+  const aiCtl = document.getElementById('aiControls');
+  if (aiCtl) aiCtl.style.display =
+    (d.viewerId === d.host && d.state === 'waiting') ? 'inline-flex' : 'none';
   const btn = document.getElementById('startBtn');
   if (d.viewerId === d.host) {
     btn.style.display = 'block';
@@ -1056,6 +1075,7 @@ function renderOpponents(d, me) {
     const isOpp = d.opponentId === p.id;
     const dead = p.dead ? 'dead' : '';
     const tags = [];
+    if (p.isAi) tags.push('电脑');
     if (p.crashed && !p.dead) tags.push('崩溃');
     if (p.level) tags.push('Lv' + p.level);
     const info = p.dead ? '出局' : `AC ${p.hp} · ${p.gold} 金`;

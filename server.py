@@ -376,6 +376,25 @@ DEFAULT_RATING = 1000
 RATING_LOSE = -20
 RATING_QUIT = -30
 
+# ---- AI 对战 ---------------------------------------------------------------
+# AI 玩家的 clientId 一律以 'ai:' 开头：真人不会生成这种 id，因而档案写入、
+# 心跳清理和房间回收都能用同一个前缀判断，无需在玩家 dict 之外再维护索引。
+AI_CID_PREFIX = 'ai:'
+AI_LEVELS = ('easy', 'normal', 'hard')
+AI_LEVEL_LABELS = {'easy': '简单', 'normal': '普通', 'hard': '困难'}
+AI_NAMES = ('电脑·贪心', '电脑·动态规划', '电脑·最短路', '电脑·并查集',
+            '电脑·二分', '电脑·搜索', '电脑·图论', '电脑·数论')
+# 难度只影响「准备期怎么花钱、铺多少人」，不触碰战斗数值与随机数顺序：
+#   refreshes   每回合最多主动刷新商店的次数
+#   board_target 期望上阵棋子数（不超过 MAX_BOARD）
+#   max_cost    愿意购买的最高费用卡
+#   trait_bias  同流派羁绊在选卡评分里的权重
+AI_TUNING = {
+    'easy':   {'refreshes': 0, 'board_target': 10, 'max_cost': 2, 'trait_bias': 0.0},
+    'normal': {'refreshes': 1, 'board_target': 16, 'max_cost': 4, 'trait_bias': 6.0},
+    'hard':   {'refreshes': 3, 'board_target': 20, 'max_cost': 5, 'trait_bias': 14.0},
+}
+
 
 def _as_str(v, limit=None, default=''):
     """只接受字符串，防止 {'text': {}} 这类脏输入把处理线程打崩。"""
@@ -502,6 +521,10 @@ def save_profiles():
 
 
 def get_profile(cid, name=None):
+    # AI 是房间内的一次性虚拟玩家，不落盘、不占玩家档案。
+    if str(cid).startswith(AI_CID_PREFIX):
+        return {'clientId': cid, 'name': name or '电脑', 'rating': DEFAULT_RATING,
+                'wins': 0, 'losses': 0, 'games': 0}
     with DATA_LOCK:
         if cid not in PROFILES:
             PROFILES[cid] = {'clientId': cid, 'name': name or '选手',
@@ -514,6 +537,9 @@ def get_profile(cid, name=None):
 
 
 def update_rating(cid, delta, result=None, name=None):
+    # 淘汰 / 结算 / 中途退出都会走到这里；AI 不参与 Rating 统计。
+    if str(cid).startswith(AI_CID_PREFIX):
+        return {}
     with DATA_LOCK:
         if cid not in PROFILES:
             PROFILES[cid] = {'clientId': cid, 'name': name or '选手',
@@ -539,8 +565,8 @@ def make_card_obj(card_id):
     return {'card': card_id, 'hp': effective_max_hp(card), 'star': 1}
 
 
-def new_player(pid, name):
-    return {
+def new_player(pid, name, is_ai=False, ai_level='normal'):
+    p = {
         'id': pid, 'name': name,
         'hp': 100, 'gold': 10, 'level': 1,
         'mind': 100, 'reason': 100, 'energy': 100,
@@ -550,6 +576,15 @@ def new_player(pid, name):
         'roundWins': 0, 'roundLosses': 0,
         'last_seen': time.time(),
     }
+    if is_ai:
+        p['isAi'] = True
+        p['aiLevel'] = ai_level if ai_level in AI_LEVELS else 'normal'
+    return p
+
+
+def is_ai_cid(cid):
+    """统一判断：AI 前缀优先，同时兼容直接传入的玩家 dict 标记。"""
+    return str(cid).startswith(AI_CID_PREFIX)
 
 
 class Room:
@@ -609,6 +644,113 @@ class Room:
             self._sys_chat(f'{name} 加入了房间')
             return True, 'joined'
 
+    # ---- AI 对手 -----------------------------------------------------------
+    def add_ai(self, ai_level='normal'):
+        """往等待中的房间加入一名电脑对手，返回 (ok, cid | 错误)。"""
+        with self.lock:
+            if self.state != 'waiting':
+                return False, '游戏已开始'
+            if len(self.players) >= MAX_PLAYERS:
+                return False, '房间已满'
+            if not [p for p in self.players.values() if not p.get('isAi')]:
+                return False, '至少要有 1 名真人玩家'
+            level = ai_level if ai_level in AI_LEVELS else 'normal'
+            n_ai = sum(1 for p in self.players.values() if p.get('isAi'))
+            name = '%s·%s' % (AI_NAMES[n_ai % len(AI_NAMES)],
+                              AI_LEVEL_LABELS[level])
+            cid = AI_CID_PREFIX + uuid.uuid4().hex[:10]
+            self.players[cid] = new_player(cid, name, is_ai=True, ai_level=level)
+            self._assign_color(cid)
+            self.version += 1
+            self._sys_chat(f'{name} 加入房间（AI 对手）')
+            return True, cid
+
+    @staticmethod
+    def _ai_traits(p):
+        counts = {}
+        for info in list(p['board'].values()) + list(p['bench']):
+            c = CARD_BY_ID.get(info['card'])
+            if c:
+                counts[c['trait']] = counts.get(c['trait'], 0) + 1
+        return counts
+
+    @staticmethod
+    def _ai_card_score(card, traits, tuning, rng):
+        score = (card['cost'] * 9 + card['attack'] * 0.35
+                 + card['hp'] * 0.04)
+        score += tuning['trait_bias'] * traits.get(card['trait'], 0)
+        return score + rng.random() * 8.0
+
+    def _ai_rng(self, cid):
+        """每位 AI 每回合一条独立确定性随机流，绝不推进全局 random。"""
+        return random.Random(f'{cid}|{self.round}')
+
+    def _ai_fill_board(self, cid, p, target):
+        """把备战席上最肉的棋子依次摆到最靠前的空格。"""
+        while p['bench'] and len(p['board']) < target:
+            free = [(x, y) for x in range(HALF_W) for y in range(HALF_H)
+                    if f'{x},{y}' not in p['board']]
+            if not free:
+                return
+            idx = max(range(len(p['bench'])),
+                      key=lambda i: CARD_BY_ID[p['bench'][i]['card']]['hp'])
+            x, y = free[0]
+            ok, _err = self.place(cid, idx, x, y)
+            if not ok:
+                return
+
+    def _ai_buy_round(self, cid, p, tuning, rng, target, max_cost):
+        """从当前商店按评分买若干张卡并立刻上阵，返回是否买到过。"""
+        bought_any = False
+        for _ in range(MAX_BOARD + MAX_BENCH):
+            if len(p['board']) >= target or not p['shop']:
+                break
+            traits = self._ai_traits(p)
+            choices = []
+            for idx, card_id in enumerate(p['shop']):
+                card = CARD_BY_ID.get(card_id)
+                if not card or card['cost'] > max_cost or card['cost'] > p['gold']:
+                    continue
+                choices.append((self._ai_card_score(card, traits, tuning, rng), idx))
+            if not choices:
+                break
+            choices.sort(reverse=True)
+            bought = False
+            for _score, idx in choices[:3]:
+                ok, _err = self.buy(cid, idx)
+                if ok:
+                    bought = bought_any = True
+                    break
+            if not bought:
+                break
+            self._ai_fill_board(cid, p, target)
+        return bought_any
+
+    def _ai_prep(self):
+        """每个准备期为所有 AI 自动买卡、布阵并点「准备」。
+
+        只调用 buy / place / refresh_shop / toggle_ready 这些现成接口，
+        不改 _simulate_battle；随机决策用独立 Random，不污染全局随机流。
+        """
+        ais = [(cid, p) for cid, p in self.players.items()
+               if p.get('isAi') and not p.get('dead')]
+        for cid, p in ais:
+            tuning = AI_TUNING.get(p.get('aiLevel'), AI_TUNING['normal'])
+            rng = self._ai_rng(cid)
+            target = min(MAX_BOARD, int(tuning['board_target']))
+            max_cost = min(int(tuning['max_cost']), SHOP_MAX_COST)
+
+            self._ai_fill_board(cid, p, target)
+            self._ai_buy_round(cid, p, tuning, rng, target, max_cost)
+            for _ in range(int(tuning['refreshes'])):
+                if len(p['board']) >= target:
+                    break
+                ok, _err = self.refresh_shop(cid, rng=rng)
+                if not ok:
+                    break
+                self._ai_buy_round(cid, p, tuning, rng, target, max_cost)
+            self.toggle_ready(cid)
+
     # ---- 聊天 --------------------------------------------------------------
     def _push_chat(self, msg):
         self.chat.append(msg)
@@ -647,16 +789,18 @@ class Room:
                 weights.append(SHOP_WEIGHT_BASE ** (top - c['cost']))
         return ids, weights
 
-    def _roll_shop(self, level, count=5, owner=None):
+    def _roll_shop(self, level, count=5, owner=None, rng=None):
         # Level drives the pool; a card one copy short of a merge is weighted
         # up so a larger card pool does not make 3-star upgrades unreachable.
+        # rng 仅由 AI 决策传入（独立随机流）；默认仍走全局 random，
+        # 真人商店与全池审计的随机顺序保持完全不变。
         ids, weights = self._shop_pool(level)
         if owner is not None:
             near = self._near_merge_ids(owner)
             if near:
                 weights = [w * (SHOP_PITY_MULT if cid in near else 1)
                            for cid, w in zip(ids, weights)]
-        return random.choices(ids, weights=weights, k=count)
+        return (rng or random).choices(ids, weights=weights, k=count)
 
     @staticmethod
     def _near_merge_ids(p):
@@ -725,6 +869,8 @@ class Room:
                         max_hp = star_max_hp(card, unit_star(info))
                         cur_hp = int(info.get('hp', max_hp))
                         info['hp'] = int(min(max_hp, cur_hp + (max_hp - cur_hp) * 0.7))
+        # AI 在准备期一开始就完成布阵并点准备，真人仍需自己点「准备」。
+        self._ai_prep()
 
     # ---- 准备期操作 --------------------------------------------------------
     def _prep_player(self, pid):
@@ -738,7 +884,7 @@ class Room:
         p['last_seen'] = time.time()
         return p, None
 
-    def refresh_shop(self, pid):
+    def refresh_shop(self, pid, rng=None):
         with self.lock:
             p, err = self._prep_player(pid)
             if err:
@@ -748,7 +894,7 @@ class Room:
                 return False, '金币不足'
             p['gold'] -= cost
             p['shopRefreshes'] = int(p.get('shopRefreshes', 0) or 0) + 1
-            p['shop'] = self._roll_shop(p['level'], owner=p)
+            p['shop'] = self._roll_shop(p['level'], owner=p, rng=rng)
             self.version += 1
             return True, None
 
@@ -2034,6 +2180,8 @@ class Room:
                 'mind': p['mind'], 'reason': p['reason'], 'energy': p['energy'],
                 'dead': p['dead'], 'crashed': p.get('crashed', False),
                 'ready': bool(p.get('ready', False)),
+                'isAi': bool(p.get('isAi', False)),
+                'aiLevel': AI_LEVEL_LABELS.get(p.get('aiLevel'), '') if p.get('isAi') else '',
                 'lastResult': p['lastResult'],
                 'roundWins': p['roundWins'], 'roundLosses': p['roundLosses']}
 
@@ -2164,7 +2312,8 @@ def leave_room(cid, rid, penalize=True):
                 r.colors.pop(aid, None)
 
         if r.host == cid:
-            cand = [c for c, pl in r.players.items() if not pl.get('abandoned')]
+            cand = [c for c, pl in r.players.items()
+                    if not pl.get('abandoned') and not pl.get('isAi')]
             if cand:
                 r.host = cand[0]
                 r._sys_chat(f'{r.players[r.host]["name"]} 成为新房主')
@@ -2174,8 +2323,9 @@ def leave_room(cid, rid, penalize=True):
             r._check_game_over()
 
         with ROOMS_LOCK:
-            alive = [pl for pl in r.players.values() if not pl.get('abandoned')]
-            if not alive:
+            humans = [pl for pl in r.players.values()
+                      if not pl.get('abandoned') and not pl.get('isAi')]
+            if not humans:
                 ROOMS.pop(rid, None)
 
 
@@ -2187,6 +2337,9 @@ def _cleanup_room_locked(r, now, to_remove):
     # 1. 心跳超时
     for cid, p in list(r.players.items()):
         if p.get('abandoned'):
+            continue
+        # AI 是房间内的虚拟玩家，不会发 /api/state 心跳，不能被超时清理。
+        if p.get('isAi'):
             continue
         last = p.get('last_seen', now)
         if now - last <= PLAYER_TIMEOUT:
@@ -2209,7 +2362,8 @@ def _cleanup_room_locked(r, now, to_remove):
 
     # 2. 房主离线 / 不在房间 → 重选
     if r.host not in r.players or r.players[r.host].get('abandoned'):
-        cand = [c for c, pl in r.players.items() if not pl.get('abandoned')]
+        cand = [c for c, pl in r.players.items()
+                if not pl.get('abandoned') and not pl.get('isAi')]
         if cand:
             r.host = cand[0]
             r._sys_chat(f'{r.players[r.host]["name"]} 成为新房主')
@@ -2219,9 +2373,10 @@ def _cleanup_room_locked(r, now, to_remove):
     if r.state in ('prep', 'battle'):
         r._check_game_over()
 
-    # 4. 房间回收：没有活人
-    alive = [pl for pl in r.players.values() if not pl.get('abandoned')]
-    if not alive:
+    # 4. 房间回收：没有真人（只剩 AI 的房间没有存在的意义，直接回收）
+    humans = [pl for pl in r.players.values()
+              if not pl.get('abandoned') and not pl.get('isAi')]
+    if not humans:
         to_remove.append(r.id)
         return
 
@@ -2389,7 +2544,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             with ROOMS_LOCK:
                 rooms = [{'id': r.id, 'host': r.players.get(r.host, {}).get('name', '?'),
                           'players': len(r.players), 'state': r.state,
-                          'max': MAX_PLAYERS} for r in ROOMS.values()]
+                          'max': MAX_PLAYERS,
+                          'aiCount': sum(1 for p in r.players.values()
+                                         if p.get('isAi'))} for r in ROOMS.values()]
             return self._json({'rooms': rooms})
         if path == '/api/state':
             qs = parse_qs(p.query)
@@ -2466,6 +2623,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
         existing = find_room_by_client(cid)
         if existing:
             return self._json({'roomId': existing.id, 'playerId': cid, 'rejoined': True})
+        ai_count = _as_int(data.get('aiCount'), 0)
+        ai_count = max(0, min(MAX_PLAYERS - 1, ai_count if isinstance(ai_count, int) else 0))
+        ai_level = _as_str(data.get('aiLevel'), 16)
+        if ai_level not in AI_LEVELS:
+            ai_level = 'normal'
         rid = uuid.uuid4().hex[:6]
         room = Room(rid, cid)
         with ROOMS_LOCK:
@@ -2475,7 +2637,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             with ROOMS_LOCK:
                 ROOMS.pop(rid, None)
             return self._json({'error': err}, 400)
-        return self._json({'roomId': rid, 'playerId': cid})
+        added = 0
+        for _ in range(ai_count):
+            ok_ai, _ai_id = room.add_ai(ai_level)
+            if not ok_ai:
+                break
+            added += 1
+        return self._json({'roomId': rid, 'playerId': cid, 'aiCount': added})
 
     def _api_join(self, data):
         cid = _as_str(data.get('clientId'), 64)
@@ -2550,6 +2718,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
             ok, err = room.toggle_ready(pid)
         elif action == 'refresh':
             ok, err = room.refresh_shop(pid)
+        elif action == 'addAi':
+            if pid != room.host:
+                ok, err = False, '只有房主可以添加电脑'
+            else:
+                ok, res = room.add_ai(_as_str(data.get('level'), 16))
+                err = None if ok else res
         elif action == 'leave':
             leave_room(pid, room.id, penalize=True)
             return self._json({'ok': True})
