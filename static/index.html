@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>OI-chess</title>
-<meta name="oi-chess-release" content="v1.7.2-bonds-ui">
-<link rel="stylesheet" href="/static/style.css?v=bonds-ui-1">
+<meta name="oi-chess-release" content="v1.7.3-ready-gate">
+<link rel="stylesheet" href="/static/style.css?v=ready-1">
 </head>
 <body>
 
@@ -99,12 +99,12 @@
         <div><span>金币</span><span id="goldVal">10</span></div>
         <div><span>AC</span><span id="hpVal">100</span></div>
         <div><span>阶段</span><span id="phaseVal">准备</span></div>
-        <div class="timer"><span>倒计时</span><span id="timerVal">30</span></div>
+        <div class="timer"><span id="timerLabel">倒计时</span><span id="timerVal">—</span></div>
       </div>
 
       <div class="opponents" id="opponents"></div>
       <div class="bonds hidden" id="bondList"></div>
-      <small id="uiBuild" style="font-size:9px;color:var(--muted)">界面版本 bonds-ui-1</small>
+      <small id="uiBuild" style="font-size:9px;color:var(--muted)">界面版本 ready-1</small>
     </aside>
 
     <!-- ========== 棋盘 ========== -->
@@ -198,7 +198,7 @@
     <h2 class="modal-title">游戏说明</h2>
     <div class="modal-body">
       <h3>一、回合流程</h3>
-      <p>准备 30s（可购买、布阵）→ 最后 3s 公布配对 → 战斗 30s（两块 4×8 棋盘合并为 8×8，棋子自动博弈）→ 结算 → 下一回合。</p>
+      <p>准备期（可购买、布阵，<b>无倒计时</b>）→ 所有存活玩家点击「准备」后<b>立即开战</b> → 战斗 30s（两块 4×8 棋盘合并为 8×8，棋子自动博弈）→ 结算 → 下一回合。</p>
 
       <h3>二、半场与站位</h3>
       <p>每人拥有 <b>4 行 × 8 列 = 32 格</b> 半场，最多 15 个棋子。8 人合计 256 格 = 16×16 大棋盘。棋盘格子始终是正方形，视角固定：自己永远在下方。</p>
@@ -296,6 +296,6 @@
   </div>
 </div>
 
-<script src="/static/script.js?v=bonds-ui-1"></script>
+<script src="/static/script.js?v=ready-1"></script>
 </body>
 </html>

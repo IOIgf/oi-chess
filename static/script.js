@@ -747,16 +747,34 @@ async function sendChat(where) {
 // ============================================================
 function updateTimerFromState(d) {
   if (d.serverNow) state.serverOffset = d.serverNow * 1000 - Date.now();
+  const label = document.getElementById('timerLabel');
   if (d.state === 'prep' && d.prepEndsAt) {
     state.prepEndsAt = d.prepEndsAt * 1000;
     state.battleEndsAt = 0;
+    if (label) label.textContent = '倒计时';
     ensureTimer();
   } else if (d.state === 'battle' && d.battleEndsAt) {
     state.battleEndsAt = d.battleEndsAt * 1000;
     if (d.battleStartedAt) state.battleStartedAt = d.battleStartedAt * 1000;
+    if (label) label.textContent = '倒计时';
     ensureTimer();
+  } else if (d.state === 'prep') {
+    // 准备期无倒计时：显示「准备 x/y」，全员点准备后立即开战
+    state.prepEndsAt = 0;
+    state.battleEndsAt = 0;
+    stopTimer();
+    if (label) label.textContent = '准备';
+    const el = document.getElementById('timerVal');
+    if (el) {
+      // thin 响应不带 players：退回最近一次全量快照
+      const src = d.players || (state.currentD && state.currentD.players) || {};
+      const ps = Object.values(src).filter(p => !p.dead);
+      const rdy = ps.filter(p => p.ready).length;
+      el.textContent = rdy + '/' + ps.length;
+    }
   } else {
     stopTimer();
+    if (label) label.textContent = '倒计时';
     const el = document.getElementById('timerVal');
     if (el) el.textContent = '—';
   }

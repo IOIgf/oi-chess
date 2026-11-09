@@ -33,7 +33,7 @@ for p in R.rglob('*'):
     if rel.parts[:2]==('audit','fx') and p.suffix=='.png':continue
     if rel.parts[:2]==('audit','placement') and p.suffix=='.png':continue
     files.append(p)
-manifest={'release':'最新版（50 张卡 = 50 种独立技能 + 全局羁绊机制 + 场上上限 20 + 负面技能平衡 + 启动前检查更新（代理可选） + 商店升星保底 + 按等级解锁卡池 + 状态轮询瘦响应 + 半屏布局遮挡修复 + 可复现性校验 + Windows 编码修复）','build':'bonds-ui-1','release_tag':RELEASE_TAG,'entrypoint':'start.bat（启动前检查更新）/ py -3 server.py','server_ascii_only':(R/'server.py').read_bytes().isascii(),'current_cards':{'o2':{'attack':0,'hp':280,'cost':3,'aura_speed_multiplier':2},'spfa':{'attack':120,'hp':1000,'cost':3}},'files':{p.relative_to(R).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)}}
+manifest={'release':'最新版（50 张卡 = 50 种独立技能 + 全局羁绊机制 + 场上上限 20 + 负面技能平衡 + 启动前检查更新（代理可选） + 准备期无倒计时（全员点准备才开战） + 商店升星保底 + 按等级解锁卡池 + 状态轮询瘦响应 + 半屏布局遮挡修复 + 可复现性校验 + Windows 编码修复）','build':'ready-1','release_tag':RELEASE_TAG,'entrypoint':'start.bat（启动前检查更新）/ py -3 server.py','server_ascii_only':(R/'server.py').read_bytes().isascii(),'current_cards':{'o2':{'attack':0,'hp':280,'cost':3,'aura_speed_multiplier':2},'spfa':{'attack':120,'hp':1000,'cost':3}},'files':{p.relative_to(R).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)}}
 (R/'版本清单.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2));files.append(R/'版本清单.json')
 with zipfile.ZipFile(DEST,'w',zipfile.ZIP_DEFLATED) as z:
     z.writestr('oi-chess/data/','')

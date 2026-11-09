@@ -15,9 +15,7 @@ MAX_BENCH = 10             # \u5907\u6218\u5e2d\u4e0a\u9650
 MAX_BOARD = 20             # \u573a\u4e0a\u68cb\u5b50\u4e0a\u9650
 HALF_W, HALF_H = 8, 4
 BATTLE_W, BATTLE_H = 8, 8
-PREP_TIME = 30.0
 BATTLE_TIME = 30.0
-PAIR_LEAD_TIME = 3.0
 MAX_ROUNDS = 10
 TICK_SEC = 0.5
 
@@ -710,7 +708,9 @@ class Room:
     def _start_prep(self, first=False):
         self._purge_abandoned()
         self.state = 'prep'
-        self.prep_end = time.time() + PREP_TIME
+        # Prep has no countdown: the battle starts only after EVERY living
+        # player toggles ready (see toggle_ready).
+        self.prep_end = 0.0
         self.pairs_computed = False
         for p in self.players.values():
             if p.get('dead'):
@@ -919,6 +919,8 @@ class Room:
             active = [pl for pl in self.players.values() if not pl.get('dead')]
             if active and all(pl['ready'] for pl in active):
                 self.prep_end = time.time()
+            else:
+                self.prep_end = 0.0
             self.version += 1
             return True, None
 
@@ -989,10 +991,7 @@ class Room:
     def _tick(self):
         now = time.time()
         if self.state == 'prep':
-            if not self.pairs_computed and now >= self.prep_end - PAIR_LEAD_TIME:
-                self._compute_pairings()
-                self.pairs_computed = True
-            if now >= self.prep_end:
+            if self.prep_end and now >= self.prep_end:
                 self._enter_battle()
         elif self.state == 'battle':
             if now - self._last_empty_check >= EMPTY_PENALTY_INTERVAL:
@@ -1976,6 +1975,7 @@ class Room:
                 'hp': p['hp'], 'gold': p['gold'], 'level': p['level'],
                 'mind': p['mind'], 'reason': p['reason'], 'energy': p['energy'],
                 'dead': p['dead'], 'crashed': p.get('crashed', False),
+                'ready': bool(p.get('ready', False)),
                 'lastResult': p['lastResult'],
                 'roundWins': p['roundWins'], 'roundLosses': p['roundLosses']}
 
