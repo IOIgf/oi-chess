@@ -36,7 +36,7 @@ TIMEOUT_ENV = 'OI_CHESS_UPDATE_TIMEOUT'
 PROXY_ENV = 'OI_CHESS_PROXY'
 DEFAULT_TIMEOUT = 2.5
 # index.html 缺失时的兜底值；发布新版本时必须与 index.html 的 meta 一起更新。
-FALLBACK_TAG = 'v1.7.5-maintainability'
+FALLBACK_TAG = 'v1.7.6-console-utf8'
 # 这些取值（忽略大小写）表示「直连，不走代理」。
 PROXY_OFF = ('', '0', 'no', 'none', 'direct', 'off')
 # check(proxy=...) 的哨兵：None 表示显式直连，_ENV 表示读环境变量。
@@ -140,6 +140,24 @@ def check(root=R, timeout=None, fetch=None, proxy=_ENV):
         return {'status': 'offline', 'local': local, 'proxy': proxy}
 
 
+def _safe_print(*args, **kwargs):
+    """中文输出绝不中断启动：编码失败时降级成 ASCII 转义文本，再失败则静默。
+
+    非中文代码页的 Windows 控制台（cp1252 / cp437）可能无法编码中文；
+    本脚本的设计契约是「退出码恒为 0，绝不阻塞启动」，因此输出必须自兜底。
+    """
+    try:
+        print(*args, **kwargs)
+        return
+    except (UnicodeEncodeError, OSError, ValueError):
+        pass
+    try:
+        text = kwargs.get('sep', ' ').join(str(a) for a in args)
+        print(text.encode('ascii', 'backslashreplace').decode('ascii'))
+    except Exception:
+        pass
+
+
 def main(argv=None):
     argv = sys.argv[1:] if argv is None else argv
     proxy = _ENV
@@ -151,30 +169,32 @@ def main(argv=None):
     if '--json' in argv:
         print(json.dumps(result, ensure_ascii=True))
         return 0
-    try:
-        # Windows 控制台重定向到文件时避免 UnicodeEncodeError 中断启动。
-        sys.stdout.reconfigure(errors='replace')
-    except (AttributeError, OSError, ValueError):
-        pass
+    for _stream in (sys.stdout, sys.stderr):
+        try:
+            # 非中文代码页的 Windows 控制台默认编码无法表示中文，统一切 UTF-8；
+            # 某些宿主会替换标准流导致 reconfigure 抛各类异常，一律忽略。
+            _stream.reconfigure(encoding='utf-8', errors='replace')
+        except Exception:
+            pass
     st = result['status']
     if st == 'update':
-        print('=' * 56)
-        print('  发现新版本：%s（当前 %s）' % (result['remote'], result['local']))
-        print('  发布页：%s' % result['url'])
-        print('  下载：  %s' % result['download'])
-        print('  不会自动更新，请手动下载替换（玩家存档会保留）。')
-        print('=' * 56)
+        _safe_print('=' * 56)
+        _safe_print('  发现新版本：%s（当前 %s）' % (result['remote'], result['local']))
+        _safe_print('  发布页：%s' % result['url'])
+        _safe_print('  下载：  %s' % result['download'])
+        _safe_print('  不会自动更新，请手动下载替换（玩家存档会保留）。')
+        _safe_print('=' * 56)
     elif st == 'latest':
-        print('检查更新：已是最新版本 %s' % result['local'])
+        _safe_print('检查更新：已是最新版本 %s' % result['local'])
     elif st == 'skipped':
-        print('检查更新：已跳过（%s=1）' % SKIP_ENV)
+        _safe_print('检查更新：已跳过（%s=1）' % SKIP_ENV)
     else:
         if result.get('proxy'):
-            print('检查更新：跳过（代理 %s 连接失败或超时，不影响启动）'
+            _safe_print('检查更新：跳过（代理 %s 连接失败或超时，不影响启动）'
                   % result['proxy'])
         else:
-            print('检查更新：跳过（离线或超时，不影响启动）')
-            print('提示：GitHub 连不上时可运行 start.bat setup 选择代理，'
+            _safe_print('检查更新：跳过（离线或超时，不影响启动）')
+            _safe_print('提示：GitHub 连不上时可运行 start.bat setup 选择代理，'
                   '或 set %s=http://127.0.0.1:7890' % PROXY_ENV)
     return 0
 

@@ -2,7 +2,9 @@
 
 **当前界面版本：ui-polish-1。** 本轮做了**整体视觉精修与信息可读性**优化：页面底与面板表面分层、纯黑细线改为柔和边框、面板/卡片/按钮加圆角与轻阴影、悬停与焦点反馈、棋盘网格线单独提对比、状态栏与卡面关键字号整体上调一档、羁绊档位效果改为独立 chip 分组并高亮激活态；浅色与深色主题同步适配。背景格线、点击格与棋子仍统一为 CSS Grid（详见 `docs/放置错位修复.md`），布局结构与棋盘对齐逻辑未改，8 视口 × 3 阶段布局回归与放置命中误差仍为 0。此前已修复半屏布局遮挡与商店卡片显示不全，并把卡牌从 35 张扩到 **50 张**、加入 6 种全新战斗机制与商店升星保底，以及启动前检查更新（**代理可选**：首次启动 `start.bat` 会询问一次直连还是走代理，选择保存在本地 `update_config.bat`，运行 `start.bat setup` 可重新选择；也可用环境变量 `OI_CHESS_PROXY=http://127.0.0.1:7890` 指定）。此前还新增了**技能去重与全局羁绊**：50 张卡改为 **50 种互不重复的技能**，新增按流派 2/4/6 档的**羁绊机制**，场上棋子上限从 15 提到 **20**；以及**准备期无倒计时**（全员点「准备」后立即开战）与**羁绊开战视觉反馈**。CSS 与 JS 缓存版本均已同步为 `ui-polish-1`，更新后浏览器请按 Ctrl+F5 强制刷新。
 
-本轮（**v1.7.5-maintainability**）是**项目治理与可维护性**更新，不涉及游戏机制与界面：新增 MIT `LICENSE` 与 GitHub Actions CI；`server.py` 改为 UTF-8 可读源码（4491 处 `\uXXXX` 反转义）、端口支持 `--port` / `OI_CHESS_PORT` 覆盖、三个巨型函数拆为分派表与 helper；删除工作区里的历史后端 `audit/before/`，改用只读数据快照；修正文档断言数与「仅标准库」表述，并写明可信局域网安全边界。改动前后 1150 场对局逐字段对比完全一致，59,200 场全池实战已按当前源码重跑。界面版本与 CSS/JS 缓存版本仍为 `ui-polish-1`，详见 `运行与验证.md`。
+本轮（**v1.7.6-console-utf8**）修复 **Windows 启动崩溃**：部分非中文代码页的机器上，`chcp 65001` 后 `check_update.py` 与 `server.py` 的中文启动输出会抛 `UnicodeEncodeError`，导致检查更新非零退出、服务器根本起不来（选代理后直接回车尤其容易触发）。现在 `start.bat` 钉住 `PYTHONIOENCODING=utf-8:replace`，两个脚本对 stdout/stderr 统一 `reconfigure(utf-8, replace)` 并捕获全部异常，启动期输出全部走 `_safe_print()`——编码失败时自动降级为 `\uXXXX` 纯 ASCII 转义文本，绝不中断启动。新增 `tests/test_console_encoding.py` 用 cp1252 严格编码 + `reconfigure` 失效环境复现并守住该场景。游戏机制、卡牌数值与界面均未改动。
+
+上一轮（**v1.7.5-maintainability**）是**项目治理与可维护性**更新，不涉及游戏机制与界面：新增 MIT `LICENSE` 与 GitHub Actions CI；`server.py` 改为 UTF-8 可读源码（4491 处 `\uXXXX` 反转义）、端口支持 `--port` / `OI_CHESS_PORT` 覆盖、三个巨型函数拆为分派表与 helper；删除工作区里的历史后端 `audit/before/`，改用只读数据快照；修正文档断言数与「仅标准库」表述，并写明可信局域网安全边界。改动前后 1150 场对局逐字段对比完全一致，59,200 场全池实战已按当前源码重跑。界面版本与 CSS/JS 缓存版本仍为 `ui-polish-1`，详见 `运行与验证.md`。
 
 ## Windows 启动
 
@@ -132,7 +134,7 @@ python server.py
 
 详见 `运行与验证.md`。当前已通过 530 项机制合同（逐卡核对）、79 项新机制定向断言（`tests/test_new_mechanics.py`）、18 组精确时序、满编随机战斗、8 视口布局回归和浏览器报告校验。完整报告中的实战结果基于记录的测试条件，不代表所有阵容都被穷举。
 
-`.github/workflows/ci.yml` 把上述验证拆成两个任务：`stdlib` 跑 13 个纯标准库测试、`py_compile`、`node --check` 与 `tools/make_release.py` 发布闸门；`browser` 安装 Playwright / Chromium 后跑 6 个浏览器回归。push 到 `main`、Pull Request 与手动触发时自动执行。本地已用同一套命令跑完全部 20 项回归。
+`.github/workflows/ci.yml` 把上述验证拆成两个任务：`stdlib` 跑 14 个纯标准库测试、`py_compile`、`node --check` 与 `tools/make_release.py` 发布闸门；`browser` 安装 Playwright / Chromium 后跑 6 个浏览器回归。push 到 `main`、Pull Request 与手动触发时自动执行。本地已用同一套命令跑完全部 21 项回归。
 
 ## 版本控制
 

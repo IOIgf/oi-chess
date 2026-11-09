@@ -1,5 +1,6 @@
 @echo off
 chcp 65001 >nul
+set "PYTHONIOENCODING=utf-8:replace"
 cd /d "%~dp0"
 
 rem ===== Update check proxy choice (first run asks once, saves to update_config.bat) =====

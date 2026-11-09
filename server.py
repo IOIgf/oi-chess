@@ -2571,12 +2571,31 @@ def get_local_ip():
         return '127.0.0.1'
 
 
+def _safe_print(*args, **kwargs):
+    """启动期中文输出绝不中断进程：编码失败时降级成 ASCII 转义文本。
+
+    Windows 非中文代码页（cp1252 / cp437）或标准流被宿主替换时，
+    reconfigure 可能失效，此时直接 print 中文会抛 UnicodeEncodeError，
+    导致服务器根本起不来。
+    """
+    try:
+        print(*args, **kwargs)
+        return
+    except (UnicodeEncodeError, OSError, ValueError):
+        pass
+    try:
+        text = kwargs.get('sep', ' ').join(str(a) for a in args)
+        print(text.encode('ascii', 'backslashreplace').decode('ascii'))
+    except Exception:
+        pass
+
+
 def _setup_utf8_console():
     """Windows 控制台默认使用本地代码页；显式切到 UTF-8 才能正确显示中文。"""
     for stream in (sys.stdout, sys.stderr):
         try:
             stream.reconfigure(encoding='utf-8', errors='replace')
-        except (AttributeError, ValueError):
+        except Exception:
             pass
     if sys.platform == 'win32':
         try:
@@ -2612,28 +2631,29 @@ def main():
     missing = [f for f in ['index.html', 'style.css', 'script.js']
                if not (STATIC_DIR / f).exists()]
     if missing:
-        print('!! 缺少静态文件:', missing)
+        _safe_print('!! 缺少静态文件:', missing)
         if sys.stdin.isatty():
-            input('按回车退出...')
+            _safe_print('按回车退出...')
+            input()
         return 1
-    print(f'已加载 {len(PROFILES)} 名玩家档案')
+    _safe_print(f'已加载 {len(PROFILES)} 名玩家档案')
     threading.Thread(target=tick_loop, daemon=True).start()
     try:
         with QuietThreadingTCPServer((host, port), Handler) as httpd:
             ip = get_local_ip()
-            print('=' * 50)
-            print('  OI chess · 局域网服务器')
-            print(f'  本机:   http://127.0.0.1:{port}')
-            print(f'  局域网: http://{ip}:{port}')
-            print('=' * 50)
+            _safe_print('=' * 50)
+            _safe_print('  OI chess · 局域网服务器')
+            _safe_print(f'  本机:   http://127.0.0.1:{port}')
+            _safe_print(f'  局域网: http://{ip}:{port}')
+            _safe_print('=' * 50)
             httpd.serve_forever()
     except OSError as e:
-        print(f'!! 端口 {port} 被占用或无法绑定: {e}')
-        print('   换端口重试: python3 server.py --port 8123')
-        print('   或设置环境变量 OI_CHESS_PORT=8123')
+        _safe_print(f'!! 端口 {port} 被占用或无法绑定: {e}')
+        _safe_print('   换端口重试: python3 server.py --port 8123')
+        _safe_print('   或设置环境变量 OI_CHESS_PORT=8123')
         return 1
     except KeyboardInterrupt:
-        print('\n已停止')
+        _safe_print('\n已停止')
     return 0
 
 
