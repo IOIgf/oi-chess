@@ -1,0 +1,72 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  stdlib:
+    name: Standard library tests + release gates
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Syntax gates
+        run: |
+          python3 -m py_compile server.py check_update.py
+          node --check static/script.js
+      # These 13 tests need only the Python standard library and no running server.
+      - name: Standard-library tests
+        run: |
+          set -e
+          for t in \
+            tests/test_battle_invariants.py tests/test_bonds.py \
+            tests/test_mechanics_audit.py tests/test_merge.py \
+            tests/test_new_mechanics.py tests/test_o2.py \
+            tests/test_pairing.py tests/test_precision.py \
+            tests/test_ready_gate.py tests/test_shop_pool.py \
+            tests/test_spfa.py tests/test_state_delta.py \
+            tests/test_update_check.py; do
+            echo "=== $t ==="
+            python3 "$t"
+          done
+      - name: Release gates
+        run: python3 tools/make_release.py
+
+  browser:
+    name: Browser regressions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install Playwright + Chromium
+        run: |
+          python3 -m pip install --upgrade pip
+          python3 -m pip install playwright
+          python3 -m playwright install --with-deps chromium
+      - name: Start server
+        run: |
+          OI_CHESS_PORT=8080 python3 server.py > /tmp/oi_server.log 2>&1 &
+          for i in $(seq 1 30); do
+            if curl -sf http://127.0.0.1:8080/ > /dev/null; then break; fi
+            sleep 1
+          done
+          curl -sf http://127.0.0.1:8080/ > /dev/null
+      - name: Browser tests
+        env:
+          OI_BASE: http://127.0.0.1:8080
+        run: |
+          set -e
+          for t in \
+            tests/test_layout.py tests/test_placement.py \
+            tests/test_fx_audit.py tests/test_grid_background.py \
+            tests/test_report_audit.py tests/anim_check.py; do
+            echo "=== $t ==="
+            python3 "$t"
+          done
