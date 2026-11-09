@@ -12,7 +12,3 @@ audit/placement/*.png
 # Generated release archives
 *.zip
 update_config.bat
-
-# CI：自动化推送凭证缺 workflow scope，GitHub 拒绝写入 .github/workflows/；
-# 配置以 .github/ci.yml.example 交付，发布包由 make_release.py 单独打包本地副本。
-.github/workflows/

@@ -18,11 +18,10 @@
     }
   },
   "files": {
-    ".github/ci.yml.example": "f2a9dbf8921ee144399ad7d313d250a627d3507a6ac6c4aa3b39fbfd83f5d49b",
     ".github/workflows/ci.yml": "f2a9dbf8921ee144399ad7d313d250a627d3507a6ac6c4aa3b39fbfd83f5d49b",
     ".gitignore": "5facfc65aa0a49672f7dcfe0ecea053d407b542cb92f3503e256841f9637859a",
     "LICENSE": "c44951ac3163da674c996e19d41662c27959bd592aa2ea05eef3581185d910b0",
-    "README.md": "1b17288a38037a213a63f5a44fad4bba455a31a82dc3e3c024ad0aa95830f236",
+    "README.md": "e27a04658d2c1593911711925d218e30123f0d093a34d70bf15af60a4da01ed8",
     "audit/anim_check.log": "331c97a41d128fb72a44b243da99696e166baf11bdcf0f470e7e23c617c59f13",
     "audit/api_fuzz.log": "55c433cf15bb74ff3a8d14f50e061e3996a8300d0b4ea4bd2c8c1c683830414a",
     "audit/balance_patch.json": "ec2237372f4a19702432500561dd3a7ef04c17b0293d59ab75a5d3e83d466b54",
@@ -113,6 +112,6 @@
     "完整检查与平衡报告.md": "14887a8f8fb5e66e7a2a3ed99a8893845cf186075b3a793bd230bc40c84f4fea",
     "机制核对表.csv": "eb0b0d0dfb68a9c6641c8ad5e15d5f02c3ee73c3bc046b325b111564b9deb99e",
     "特效预览.html": "8be87dda2766891260486d95445d3f4e1783ed33f609885dc040ac794e072e10",
-    "运行与验证.md": "13bbd4d71cc2b64801e9810e844b3c6acc0199eeb3cb25410a731904a0a65508"
+    "运行与验证.md": "f398b59261c102b6febc595774e2c09cb365e74faef9e4cf89fad0a6d3f371b3"
   }
 }
