@@ -96,12 +96,12 @@ function showScreen(id) {
   document.getElementById(id).classList.add('active');
 }
 let toastTimer;
-function toast(msg) {
+function toast(msg, ms) {
   const el = document.getElementById('toast');
   el.textContent = msg;
   el.classList.add('show');
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => el.classList.remove('show'), 1800);
+  toastTimer = setTimeout(() => el.classList.remove('show'), ms || 1800);
 }
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({
@@ -917,6 +917,9 @@ function renderGame(d) {
   if (!me.dead && me.crashed) phase += '·崩溃';
   document.getElementById('phaseVal').textContent = phase;
   renderOpponents(d, me);
+  state.bonds = d.bonds || [];
+  state.bondTiers = d.bondTiers || [2, 4, 6];
+  state.bondEffects = d.bondEffects || [];
   renderBonds(d.bonds);
 
   const byeBadge = document.getElementById('byeBadge');
@@ -1002,6 +1005,15 @@ function renderGame(d) {
       }
 
       initBattleUnits(d, me, b);
+  // 开战即提示本场激活的羁绊（只看自己），让加成可见
+  const mine = Object.values(battleBondInfo())
+    .filter(g => g.owner === me.id && g.tier > 0)
+    .sort((a, b2) => b2.tier - a.tier);
+  if (mine.length) {
+    const eff = state.bondEffects || ['攻击 +6%', '生命 +8%', '承伤 -6%'];
+    toast('羁绊激活：' + mine.map(g =>
+      `${g.name}×${g.count}（${eff.slice(0, g.tier).join(' ')}）`).join('；'), 3600);
+  }
       // 一开战就按服务端时间轴回放，不再延迟 4 秒（否则会丢掉开场帧）
       startBattlePlayback();
       if (!isBye) triggerBattleIntro(d, me);
@@ -1128,6 +1140,40 @@ function setUnitPos(el, px, py) {
   if (el._tf !== t) { el._tf = t; el.style.transform = t; }
 }
 
+// ===== 战斗内羁绊视觉：棋子徽标 + 开战激活提示 =====
+// 按 (owner, trait) 统计本场战斗首帧的单位，逐组算出羁绊档位。
+// 结果按 battleKey 缓存，同一场战斗只算一次。
+function battleBondInfo() {
+  const frames = state.currentFrames || [];
+  if (!frames.length) return {};
+  const key = state.activeBattleKey;
+  if (state.bondCache && state.bondCacheKey === key) return state.bondCache;
+  const tiers = state.bondTiers || [2, 4, 6];
+  const groups = {};
+  for (const u of frames[0].units || []) {
+    const card = state.cards[u.card];
+    if (!card) continue;
+    const k = u.owner + '|' + card.trait;
+    if (!groups[k]) groups[k] = { owner: u.owner, trait: card.trait, count: 0 };
+    groups[k].count++;
+  }
+  for (const g of Object.values(groups)) {
+    let tier = 0;
+    for (const need of tiers) if (g.count >= need) tier++;
+    g.tier = tier;
+    g.name = state.traits[g.trait] || g.trait;
+  }
+  state.bondCache = groups;
+  state.bondCacheKey = key;
+  return groups;
+}
+
+function bondBadgeHtml(tier) {
+  const dots = Array.from({ length: (state.bondTiers || [2, 4, 6]).length },
+    (_, i) => `<i${i < tier ? ' class="on"' : ''}></i>`).join('');
+  return `<span class="unit-bond" data-tier="${tier}">${dots}</span>`;
+}
+
 function initBattleUnits(d, me, b) {
   const oppLayer = document.getElementById('unitLayerOpp');
   const selfLayer = document.getElementById('unitLayerSelf');
@@ -1189,6 +1235,10 @@ function createUnitEl(u, d, isSelf) {
   const player = d.players[u.owner];
   const colorIdx = player ? player.color : 7;
   const star = starOf(u);
+  const bond = battleBondInfo()[u.owner + '|' + (card ? card.trait : '')] || { tier: 0 };
+  const bondTitle = bond.tier > 0
+    ? `羁绊 ${bond.name || ''} ×${bond.count}：${(state.bondEffects || ['攻击 +6%', '生命 +8%', '承伤 -6%']).slice(0, bond.tier).join(' ')}`
+    : '';
 
   const el = document.createElement('div');
   el.className = 'unit' + (isSelf ? ' self' : '');
@@ -1202,7 +1252,8 @@ function createUnitEl(u, d, isSelf) {
   el.dataset.card = u.card;
   el.style.setProperty('--owner-color', `var(--p${colorIdx})`);
   el.innerHTML = `
-    <div class="unit-inner" title="${escapeHtml(card ? card.name : '')}">
+    <div class="unit-inner" title="${escapeHtml((card ? card.name : '') + (bondTitle ? ' · ' + bondTitle : ''))}">
+      ${bond.tier > 0 ? bondBadgeHtml(bond.tier) : ''}
       <div class="unit-stars">${starText(star)}</div>
       <div class="unit-body">
         <div class="unit-name">${escapeHtml(card ? card.name : '?')}</div>
