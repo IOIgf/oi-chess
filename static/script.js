@@ -475,6 +475,8 @@ async function createRoom() {
     state.aiLevel = aiLevel;
     const lobbyLevel = document.getElementById('lobbyAiLevel');
     if (lobbyLevel) lobbyLevel.value = aiLevel;
+    const gameLevel = document.getElementById('gameAiLevel');
+    if (gameLevel) gameLevel.value = aiLevel;
     saveIdentity();
     if (d.rejoined) toast('已回到原房间');
     else if (d.aiCount) toast(`已加入 ${d.aiCount} 个电脑对手`);
@@ -483,9 +485,15 @@ async function createRoom() {
   } catch (e) { toast(e.message); }
 }
 async function addAi() {
-  const el = document.getElementById('lobbyAiLevel');
+  const el = document.getElementById('gameAiLevel') || document.getElementById('lobbyAiLevel');
   const level = el ? (el.value || 'normal') : 'normal';
   if (await doAction('addAi', { level })) toast('已添加一名电脑对手');
+}
+// 大厅与局内的难度选择共用同一个值
+function syncAiLevel() {
+  const src = document.getElementById('lobbyAiLevel');
+  const dst = document.getElementById('gameAiLevel');
+  if (src && dst) dst.value = src.value;
 }
 async function showRoomList() {
   try {
@@ -849,6 +857,11 @@ function render(d) {
   showScreen('game');
   updateTimerFromState(d);
 
+  // 局内加电脑：房主可在准备期/战斗期补人，消除奇数人数的轮空
+  const gameAi = document.getElementById('gameAiControls');
+  if (gameAi) gameAi.style.display =
+    (d.viewerId === d.host && d.state !== 'ended') ? 'inline-flex' : 'none';
+
   const me = d.players[d.viewerId];
   if (!state.mergeInit) {
     state.mergeInit = true;
@@ -1078,6 +1091,7 @@ function renderOpponents(d, me) {
     if (p.isAi) tags.push('电脑');
     if (p.crashed && !p.dead) tags.push('崩溃');
     if (p.level) tags.push('Lv' + p.level);
+    if (p.byeCount) tags.push('轮空' + p.byeCount);
     const info = p.dead ? '出局' : `AC ${p.hp} · ${p.gold} 金`;
     return `<div class="opp ${isSelf ? 'self' : ''} ${isOpp ? 'opponent' : ''} ${dead}"
       title="${tags.join(' ')}">

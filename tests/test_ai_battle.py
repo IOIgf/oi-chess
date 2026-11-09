@@ -2,7 +2,7 @@
 
 覆盖：
   1. AI 玩家模型：cid 前缀、isAi / aiLevel 标记、三档难度
-  2. add_ai 约束：仅等待期、需有真人、受 MAX_PLAYERS 限制
+  2. add_ai 约束：需有真人、受 MAX_PLAYERS 限制；等待期与对局中都能加入
   3. 对外状态：_public_player / get_state 暴露「电脑」标记
   4. 准备期自动化：AI 自动买卡布阵并点准备，真人仍需自己点准备
   5. 难度梯度：多轮后 简单 <= 普通 <= 困难 的上阵人数
@@ -10,7 +10,8 @@
   7. 档案隔离：AI 不写 PROFILES、不参与 Rating
   8. 清理豁免：AI 不受心跳超时淘汰；没有真人时房间被回收
   9. 全员准备门控与多轮推进不卡死
- 10. HTTP API：/api/rooms 带 aiCount / aiLevel、addAi 动作与房主校验
+ 10. 局内加入电脑：按当前回合初始化、立即决策并准备、战斗期加入视为本轮轮空
+ 11. HTTP API：/api/rooms 带 aiCount / aiLevel、addAi 动作与房主校验
 """
 import random
 import sys
@@ -62,7 +63,9 @@ ok(added and cid.startswith(s.AI_CID_PREFIX), 'add_ai returns an ai: cid')
 ok(r.players[cid]['aiLevel'] == 'normal', 'unknown difficulty falls back to normal')
 ok(cid in r.colors, 'AI gets a player color')
 r.state = 'prep'
-ok(not r.add_ai('hard')[0], 'add_ai rejected once the game started')
+ok(r.add_ai('hard')[0], 'add_ai allowed during the prep phase')
+r.state = 'ended'
+ok(not r.add_ai('hard')[0], 'add_ai rejected once the game ended')
 
 r2 = fresh_room()
 for _ in range(s.MAX_PLAYERS - 1):
@@ -164,7 +167,38 @@ for _ in range(s.MAX_ROUNDS + 2):
 ok(rounds >= 3, 'AI game advances through multiple rounds without stalling')
 ok(r.state in ('prep', 'ended'), 'game stays in a reachable state')
 
-# ---- 10. HTTP API（伪 Handler，无需起服务） -------------------------------
+# ---- 10. 局内加入电脑（真人房间补位，消除奇数轮空） -----------------------
+r = fresh_room(1, 'normal')
+ok(r.start('H')[0], 'start a human + AI game')
+ok(r.state == 'prep', 'the game is in the prep phase')
+r.players['H']['hp'] = 64
+before_state = random.getstate()
+ok_ai, new_cid = r.add_ai('hard')
+ok(ok_ai and new_cid.startswith(s.AI_CID_PREFIX), 'AI can join an ongoing game')
+np = r.players[new_cid]
+ok(np['hp'] == 64, 'the late AI starts at the humans\' HP level')
+ok(0 <= np['gold'] <= 18, 'the late AI starts with the standard round gold and may spend it')
+ok(np['level'] == s.level_for_round(r.round), 'the late AI uses the current round level')
+ok(0 <= len(np['shop']) <= 5, 'the late AI gets a shop immediately')
+ok(np['ready'] is True, 'the late AI readies itself in the prep phase')
+ok(0 < len(np['board']) <= s.MAX_BOARD, 'the late AI buys and places a board')
+ok(random.getstate() == before_state,
+   'a late AI never advances the global random stream')
+ok(r.pairs_computed is False, 'the pairing is recomputed after the late AI joins')
+r.toggle_ready('H')
+ok(r.prep_end > 0, 'the battle arms once every living player is ready')
+
+r2 = fresh_room(1, 'normal')
+ok(r2.start('H')[0], 'start another game')
+r2.toggle_ready('H')
+r2._tick()
+ok(r2.state == 'battle', 'the game entered the battle phase')
+ok_ai2, battle_cid = r2.add_ai('easy')
+ok(ok_ai2, 'AI can join during the battle phase')
+ok(battle_cid in r2._bye_players, 'a battle-phase AI is a bye for the current round')
+ok(r2.players[battle_cid]['shop'], 'a battle-phase AI still receives a shop')
+
+# ---- 11. HTTP API（伪 Handler，无需起服务） -------------------------------
 class FakeHandler:
     def __init__(self, data):
         self.data = data
@@ -197,6 +231,8 @@ s.Handler._api_action(h2, h2.data)
 ok(h2.status == 200, 'addAi action succeeds for the host')
 ok(sum(1 for pl in room.players.values() if pl.get('isAi')) == 3,
    'addAi appends one more AI')
+ok(str(h2.result.get('aiId', '')).startswith(s.AI_CID_PREFIX),
+   'addAi returns the new AI id')
 
 ok(room.add_player('api-guest', '客人')[0], 'a second human joins the room')
 h3 = FakeHandler({'playerId': 'api-guest', 'action': 'addAi', 'level': 'easy'})

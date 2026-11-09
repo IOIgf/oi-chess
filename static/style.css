@@ -1025,6 +1025,10 @@ body {
   border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft);
 }
 .ai-controls { display: inline-flex; align-items: center; gap: 8px; }
+/* 局内补电脑：侧栏空间有限，用紧凑控件 */
+.in-game-ai { margin-top: 8px; flex-wrap: wrap; gap: 6px; }
+.in-game-ai select { padding: 6px 6px; font-size: 11px; }
+.in-game-ai .btn.small { padding: 5px 8px; font-size: 11px; }
 .ai-tag {
   display: inline-block; padding: 1px 6px; font-size: 9px; line-height: 1.5;
   color: var(--accent); background: var(--accent-soft);

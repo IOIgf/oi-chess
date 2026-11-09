@@ -609,6 +609,9 @@ class Room:
         self._last_empty_check = 0
         self._bye_players = []
         self._bye_frames = {}
+        # 轮空调度：按累计轮空次数轮换，避免奇数人数时同一人反复轮空。
+        self._bye_counts = {}
+        self._last_bye = None
         self._tick_lock = threading.Lock()
         self._ended_at = None
 
@@ -646,23 +649,50 @@ class Room:
 
     # ---- AI 对手 -----------------------------------------------------------
     def add_ai(self, ai_level='normal'):
-        """往等待中的房间加入一名电脑对手，返回 (ok, cid | 错误)。"""
+        """往房间加入一名电脑对手，返回 (ok, cid | 错误)。
+
+        等待期加入时由 start() 统一发商店；对局中（prep / battle）加入时按
+        当前回合即时初始化，准备期还会立刻完成决策并点「准备」，让房主可以
+        用电脑补齐奇数人数、消除轮空。纯真人对局不会被自动塞入电脑。
+        """
         with self.lock:
-            if self.state != 'waiting':
-                return False, '游戏已开始'
+            if self.state == 'ended':
+                return False, '对局已结束'
             if len(self.players) >= MAX_PLAYERS:
                 return False, '房间已满'
-            if not [p for p in self.players.values() if not p.get('isAi')]:
+            humans = [q for q in self.players.values() if not q.get('isAi')]
+            if not humans:
                 return False, '至少要有 1 名真人玩家'
             level = ai_level if ai_level in AI_LEVELS else 'normal'
-            n_ai = sum(1 for p in self.players.values() if p.get('isAi'))
+            n_ai = sum(1 for q in self.players.values() if q.get('isAi'))
             name = '%s·%s' % (AI_NAMES[n_ai % len(AI_NAMES)],
                               AI_LEVEL_LABELS[level])
             cid = AI_CID_PREFIX + uuid.uuid4().hex[:10]
-            self.players[cid] = new_player(cid, name, is_ai=True, ai_level=level)
+            p = new_player(cid, name, is_ai=True, ai_level=level)
+            if self.state != 'waiting':
+                # 与场上真人取同一水平线，避免中途加入的电脑过强或过弱。
+                living = [q for q in humans if not q.get('dead')] or humans
+                for key in ('hp', 'mind', 'reason', 'energy'):
+                    p[key] = int(sum(q[key] for q in living) / len(living))
+                p['gold'] = 18
+                p['level'] = level_for_round(self.round)
+                p['shop'] = self._roll_shop(p['level'], owner=p,
+                                            rng=self._ai_rng(cid))
+            self.players[cid] = p
             self._assign_color(cid)
             self.version += 1
             self._sys_chat(f'{name} 加入房间（AI 对手）')
+
+            if self.state == 'prep':
+                # 冻结开战门控，避免旧的 prep_end 在新电脑决策完成前抢跑；
+                # 随后 _ai_prep_one -> toggle_ready 会重新检查全员准备状态。
+                self.prep_end = 0.0
+                self.pairs_computed = False
+                self._ai_prep_one(cid)
+            elif self.state == 'battle':
+                # 本轮配对与战斗帧已生成，新电脑本轮视为轮空，下轮起正常参战。
+                self._bye_players.append(cid)
+                self._bye_frames[cid] = self._make_bye_frames(cid)
             return True, cid
 
     @staticmethod
@@ -726,30 +756,36 @@ class Room:
             self._ai_fill_board(cid, p, target)
         return bought_any
 
+    def _ai_prep_one(self, cid):
+        """让单个 AI 在当前准备期完成买卡、布阵并点「准备」。"""
+        p = self.players.get(cid)
+        if not p or not p.get('isAi') or p.get('dead'):
+            return
+        tuning = AI_TUNING.get(p.get('aiLevel'), AI_TUNING['normal'])
+        rng = self._ai_rng(cid)
+        target = min(MAX_BOARD, int(tuning['board_target']))
+        max_cost = min(int(tuning['max_cost']), SHOP_MAX_COST)
+
+        self._ai_fill_board(cid, p, target)
+        self._ai_buy_round(cid, p, tuning, rng, target, max_cost)
+        for _ in range(int(tuning['refreshes'])):
+            if len(p['board']) >= target:
+                break
+            ok, _err = self.refresh_shop(cid, rng=rng)
+            if not ok:
+                break
+            self._ai_buy_round(cid, p, tuning, rng, target, max_cost)
+        self.toggle_ready(cid)
+
     def _ai_prep(self):
         """每个准备期为所有 AI 自动买卡、布阵并点「准备」。
 
         只调用 buy / place / refresh_shop / toggle_ready 这些现成接口，
         不改 _simulate_battle；随机决策用独立 Random，不污染全局随机流。
         """
-        ais = [(cid, p) for cid, p in self.players.items()
-               if p.get('isAi') and not p.get('dead')]
-        for cid, p in ais:
-            tuning = AI_TUNING.get(p.get('aiLevel'), AI_TUNING['normal'])
-            rng = self._ai_rng(cid)
-            target = min(MAX_BOARD, int(tuning['board_target']))
-            max_cost = min(int(tuning['max_cost']), SHOP_MAX_COST)
-
-            self._ai_fill_board(cid, p, target)
-            self._ai_buy_round(cid, p, tuning, rng, target, max_cost)
-            for _ in range(int(tuning['refreshes'])):
-                if len(p['board']) >= target:
-                    break
-                ok, _err = self.refresh_shop(cid, rng=rng)
-                if not ok:
-                    break
-                self._ai_buy_round(cid, p, tuning, rng, target, max_cost)
-            self.toggle_ready(cid)
+        for cid in [cid for cid, p in self.players.items()
+                    if p.get('isAi') and not p.get('dead')]:
+            self._ai_prep_one(cid)
 
     # ---- 聊天 --------------------------------------------------------------
     def _push_chat(self, msg):
@@ -847,6 +883,8 @@ class Room:
         self.pairings = [pr for pr in self.pairings
                          if pr['a'] in self.players and pr['b'] in self.players]
         self._bye_players = [cid for cid in self._bye_players if cid in self.players]
+        self._bye_counts = {cid: v for cid, v in self._bye_counts.items()
+                            if cid in self.players}
         return True
 
     def _start_prep(self, first=False):
@@ -1071,15 +1109,45 @@ class Room:
             return True, None
 
     # ---- 配对 --------------------------------------------------------------
+    def _pick_bye(self, ids):
+        """奇数人数时挑轮空者。
+
+        优先级：累计轮空次数最少 → 避免连续轮空 → 独立确定性 RNG 打散。
+        旧逻辑按 HP 排序后把最高的剩下来，而轮空不扣血，于是同一人会
+        一直轮空；这里完全不看 HP，且用独立 Random，不推进全局随机流，
+        全池审计的可复现性不受影响。
+        """
+        rng = random.Random(f'bye|{self.id}|{self.round}|{len(ids)}')
+        noise = {cid: rng.random() for cid in ids}
+
+        def rank(cid):
+            return (self._bye_counts.get(cid, 0),
+                    1 if cid == self._last_bye else 0,
+                    noise[cid])
+
+        return min(ids, key=rank)
+
     def _compute_pairings(self):
         ids = [cid for cid, p in self.players.items() if not p.get('dead')]
         n = len(ids)
         if n < 2:
             self.pairings = []
             self._bye_players = list(ids)
+            self.last_pair_ids = []
             return
 
+        # HP 只用于让血量相近的玩家对战，绝不用于挑选轮空者。
         ids.sort(key=lambda cid: self.players[cid]['hp'])
+        self._bye_players = []
+        if n % 2:
+            bye = self._pick_bye(ids)
+            ids.remove(bye)
+            self._bye_players = [bye]
+            self._bye_counts[bye] = self._bye_counts.get(bye, 0) + 1
+            self._last_bye = bye
+        else:
+            self._last_bye = None
+
         last_pairs = set(frozenset(p) for p in self.last_pair_ids)
         pairs = []
         used = set()
@@ -1102,7 +1170,6 @@ class Room:
                 used.add(a)
                 used.add(best)
 
-        self._bye_players = [cid for cid in ids if cid not in used]
         self.pairings = pairs
         self.last_pair_ids = [(p['a'], p['b']) for p in pairs]
         for pr in pairs:
@@ -2174,7 +2241,7 @@ class Room:
         return side, frames, events, opp, bye
 
     @staticmethod
-    def _public_player(cid, p, color):
+    def _public_player(cid, p, color, bye_count=0):
         return {'id': cid, 'name': p['name'], 'color': color,
                 'hp': p['hp'], 'gold': p['gold'], 'level': p['level'],
                 'mind': p['mind'], 'reason': p['reason'], 'energy': p['energy'],
@@ -2182,6 +2249,7 @@ class Room:
                 'ready': bool(p.get('ready', False)),
                 'isAi': bool(p.get('isAi', False)),
                 'aiLevel': AI_LEVEL_LABELS.get(p.get('aiLevel'), '') if p.get('isAi') else '',
+                'byeCount': int(bye_count),
                 'lastResult': p['lastResult'],
                 'roundWins': p['roundWins'], 'roundLosses': p['roundLosses']}
 
@@ -2219,7 +2287,8 @@ class Room:
                 }
             players_out = {}
             for cid, p in self.players.items():
-                row = self._public_player(cid, p, self.colors.get(cid, 0))
+                row = self._public_player(cid, p, self.colors.get(cid, 0),
+                                          self._bye_counts.get(cid, 0))
                 if cid == viewer_id:
                     row.update({'board': p['board'], 'bench': p['bench'],
                                 'shop': p['shop'], 'ready': p['ready'],
@@ -2720,10 +2789,11 @@ class Handler(http.server.BaseHTTPRequestHandler):
             ok, err = room.refresh_shop(pid)
         elif action == 'addAi':
             if pid != room.host:
-                ok, err = False, '只有房主可以添加电脑'
-            else:
-                ok, res = room.add_ai(_as_str(data.get('level'), 16))
-                err = None if ok else res
+                return self._json({'error': '只有房主可以添加电脑'}, 400)
+            ok, res = room.add_ai(_as_str(data.get('level'), 16))
+            if not ok:
+                return self._json({'error': res}, 400)
+            return self._json({'ok': True, 'aiId': res})
         elif action == 'leave':
             leave_room(pid, room.id, penalize=True)
             return self._json({'ok': True})
