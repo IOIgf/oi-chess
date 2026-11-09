@@ -1,0 +1,11 @@
+{
+  "diff": {"attack": 31, "hp": 298, "name": "差分"},
+  "xor": {"attack": 30, "hp": 295, "name": "异或"},
+  "quick_sort": {"attack": 54, "hp": 534, "name": "快速排序"},
+  "ids": {"attack": 72, "hp": 711, "name": "迭代加深"},
+  "bidirectional": {"attack": 81, "hp": 797, "name": "双向搜索"},
+  "sweep_line": {"attack": 87, "hp": 870, "name": "扫描线"},
+  "spfa": {"attack": 120, "hp": 1100, "name": "SPFA"},
+  "bitmask_dp": {"attack": 82, "hp": 813, "name": "状压 DP"},
+  "a_star": {"attack": 114, "hp": 1141, "name": "A*"}
+}

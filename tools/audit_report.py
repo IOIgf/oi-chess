@@ -56,7 +56,8 @@ O2 保持你指定的 **3 金 / 0 攻击 / 280 生命 / 周围八格攻速 ×2**
 
 '''
     reasons={'diff':'基线纯卡及两种混编均偏弱，提高延迟群伤的基础收益与存活。','xor':'射程修复后仍在低费中明显突出，小幅下调，保留高攻反制定位。','quick_sort':'射程限制后面板偏低，三个口径都偏弱，补基础攻血。','ids':'前期混编偏弱，轻补面板，保留长局射程优势。','bidirectional':'纯卡与多样混编偏弱，轻补双端技能的基础面板。','sweep_line':'三个口径偏弱，补足递增群攻的基础面板。','spfa':'精确攻速修复后纯卡/混编均较突出，仅降低生命，保留高攻和随机卡顿。','bitmask_dp':'目标行修复提高群伤收益，小幅收面板，保留同行协同。','a_star':'高面板收割收益较稳定，小幅回收基础攻血。'}
-    old_s={c['id']:c for c in __import__('balance_lab').load_server(str(ROOT/'audit/before/server.py')).CARDS}
+    # 旧卡攻血固化为只读数据快照；历史可运行源码已移入 git history，工作区不再保留。
+    old_s=read('audit/baseline/cards_before.json')
     changes=[]
     for cid in patch:
         c=s.CARD_BY_ID[cid];old=old_s[cid];name=c['name'];changes.append([name,f"{old['attack']} / {old['hp']}",f"{c['attack']} / {c['hp']}",reasons[cid]])
@@ -103,7 +104,7 @@ O2 保持你指定的 **3 金 / 0 攻击 / 280 生命 / 周围八格攻速 ×2**
 - `全卡实战与定位.csv`：不含主观评分的实测定位表。
 - `特效预览.html`：无需联网的真实战斗演示，含 O2 / SPFA / 减速 / 延迟 / 换攻。
 - `动画预览.html`：原有演示已同步新版渲染。
-- `audit/before/`：本轮之前的源码与数据备份；`audit/baseline/`、`audit/final/`：可回溯实战数据。
+- `audit/baseline/cards_before.json`：平衡调整前 9 张卡的攻 / 血快照（仅供报告生成）；历史源码已移入 git history，工作区不再保留可运行的旧后端。`audit/baseline/`、`audit/final/`：可回溯实战数据。
 
 ## 后续修复：准备阶段放置错位
 

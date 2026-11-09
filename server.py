@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-import http.server, socketserver, json, threading, uuid, random, socket, sys, time, math
+import http.server, socketserver, json, threading, uuid, random, socket, sys, time, math, os, argparse
 from urllib.parse import urlparse, parse_qs
 from pathlib import Path
 from concurrent.futures import ThreadPoolExecutor
@@ -11,26 +11,26 @@ DATA_DIR = (Path(__file__).parent / 'data').resolve()
 DATA_FILE = DATA_DIR / 'players.json'
 
 MAX_PLAYERS = 8
-MAX_BENCH = 10             # \u5907\u6218\u5e2d\u4e0a\u9650
-MAX_BOARD = 20             # \u573a\u4e0a\u68cb\u5b50\u4e0a\u9650
+MAX_BENCH = 10             # 备战席上限
+MAX_BOARD = 20             # 场上棋子上限
 HALF_W, HALF_H = 8, 4
 BATTLE_W, BATTLE_H = 8, 8
 BATTLE_TIME = 30.0
 MAX_ROUNDS = 10
 TICK_SEC = 0.5
 
-# ---- \u6389\u7ebf / \u56de\u6536\u53c2\u6570 -------------------------------------------------------
-PLAYER_TIMEOUT = 120.0     # \u8d85\u8fc7\u8be5\u65f6\u957f\u65e0\u5fc3\u8df3\u89c6\u4e3a\u6389\u7ebf
-ROOM_TTL_ENDED = 60.0    # \u5df2\u7ed3\u675f\u623f\u95f4\u4fdd\u7559\u65f6\u957f\uff08\u79d2\uff09
-CLEANUP_INTERVAL = 5.0    # \u5fc3\u8df3\u6e05\u7406\u5468\u671f\uff08\u79d2\uff09
+# ---- 掉线 / 回收参数 -------------------------------------------------------
+PLAYER_TIMEOUT = 120.0     # 超过该时长无心跳视为掉线
+ROOM_TTL_ENDED = 60.0    # 已结束房间保留时长（秒）
+CLEANUP_INTERVAL = 5.0    # 心跳清理周期（秒）
 
 ATK_CD = 2.0
 ATK_CD_SLOWED = 3.0
-SLOW_DURATION = 3.0        # \u51cf\u901f\u6301\u7eed\u65f6\u95f4\uff08\u65e7\u7248\u662f\u6574\u573a\u6c38\u4e45\uff0c\u7b49\u4ef7\u4e8e\u6c38\u4e45\u524a\u5f31\u654c\u65b9 33% \u8f93\u51fa\uff09
+SLOW_DURATION = 3.0        # 减速持续时间（旧版是整场永久，等价于永久削弱敌方 33% 输出）
 SKILL_CD = 6.0
 DMG_MULT = 0.5 * 2.0 / 3.0
 
-# ---- \u5fc3\u6001\uff1a\u51b3\u5b9a\u4f24\u5bb3\u8f93\u51fa\u4e0e\u627f\u4f24 ----------------------------------------------
+# ---- 心态：决定伤害输出与承伤 ----------------------------------------------
 MIND_HIGH = 70
 MIND_LOW = 30
 MIND_DMG_UP = 1.10
@@ -41,9 +41,9 @@ MIND_MAX = 100
 REASON_CRASH_MIND = 8
 
 SHIELD_CAP_RATIO = 0.5
-AOE_DEBUFF_RATIO = 0.35     # BFS\uff1a\u5168\u573a\u4f24\u5bb3\u500d\u7387\uff08\u51cf\u901f\u6548\u679c\u89c1 _use_skill\uff09
-SHIELD_ON_LOW_ATK = 0.5    # \u526a\u679d\uff1a\u5355\u6b21\u4f24\u5bb3\u4f4e\u4e8e\u81ea\u8eab\u653b\u51fb\u529b\u7684\u8fd9\u4e2a\u6bd4\u4f8b\u624d\u89e6\u53d1
-SHIELD_ON_LOW_CONVERT = 0.5  # \u89e6\u53d1\u65f6\u628a\u4f24\u5bb3\u7684\u8fd9\u4e2a\u6bd4\u4f8b\u8f6c\u5316\u4e3a\u62a4\u76fe\uff08\u5176\u4f59\u4ecd\u7136\u627f\u53d7\uff09
+AOE_DEBUFF_RATIO = 0.35     # BFS：全场伤害倍率（减速效果见 _use_skill）
+SHIELD_ON_LOW_ATK = 0.5    # 剪枝：单次伤害低于自身攻击力的这个比例才触发
+SHIELD_ON_LOW_CONVERT = 0.5  # 触发时把伤害的这个比例转化为护盾（其余仍然承受）
 THORNS_RATIO = 0.35
 LINK_SHARE = 0.30
 CHARGE_STEPS = 4
@@ -62,7 +62,7 @@ CDQ_LATE = 1.8
 PRIME_MULT = 1.8
 EXPECT_MULT = 1.25
 SWAP_DURATION = 6.0
-# SPFA\uff1a\u653b\u901f\u3001\u4f24\u5bb3\u500d\u7387\uff1b\u6bcf\u6b21\u666e\u653b\u540e\u72ec\u7acb\u5224\u5b9a\u5361\u987f\u3002
+# SPFA：攻速、伤害倍率；每次普攻后独立判定卡顿。
 SPFA_SPEED_MULT = 1.5
 SPFA_DAMAGE_MULT = 1.2
 SPFA_STALL_CHANCE = 0.20
@@ -86,7 +86,7 @@ BOND_TIERS = (2, 4, 6)
 BOND_ATK_STEP = 0.06       # tier 1: +6% attack for units of that trait
 BOND_HP_STEP = 0.08        # tier 2: +8% max HP
 BOND_GUARD_STEP = 0.06     # tier 3: -6% damage taken
-BOND_EFFECTS = ['\u653b\u51fb +6%', '\u751f\u547d +8%', '\u627f\u4f24 -6%']  # exposed to the client
+BOND_EFFECTS = ['攻击 +6%', '生命 +8%', '承伤 -6%']  # exposed to the client
 
 # ---- Unique skills: one distinct skill id per card -------------------------
 PREFIX_GROWTH_STEP = 0.10
@@ -127,156 +127,156 @@ MIND_WIN = 5
 MIND_LOSE = 8
 
 CARDS_RAW = [
-    ('linear_dp', '\u7ebf\u6027 DP', 1, '\u666e\u53ca', 0.75, 'dynamic_programming', 41, 401, 4, 4, 'line',
-     '\u6cbf\u884c/\u5217\u76f4\u7ebf\u653b\u51fb',
-     '\u6280\u80fd\uff1a\u5bf9\u5c04\u7a0b\u5185\u76ee\u6807\u6240\u5728\u884c\u6216\u5217\u4e2d\u654c\u4eba\u66f4\u591a\u7684\u4e00\u6761\u7ebf\u9020\u6210 50% \u4f24\u5bb3'),
-    ('tree_array', '\u6811\u72b6\u6570\u7ec4', 1, '\u666e\u53ca', 0.75, 'data_structure', 37, 364, 4, 4, 'stack_ally',
-     '\u53cb\u519b\u884c\u52a8\u53e0\u5c42',
-     '\u88ab\u52a8\uff1a\u6bcf\u6b21\u53cb\u519b\u666e\u653b\u6216\u65bd\u6cd5 +1 \u5c42\uff0c\u6bcf\u5c42 +8% \u666e\u653b\u4f24\u5bb3\uff08\u4e0a\u9650 6 \u5c42\uff09'),
-    ('monotonic_stack', '\u5355\u8c03\u6808', 1, '\u666e\u53ca', 0.75, 'data_structure', 38, 371, 4, 4, 'charge_burst',
-     '\u79ef\u7d2f\u540e\u7206\u53d1',
-     '\u88ab\u52a8\uff1a\u6bcf\u7b2c 4 \u6b21\u666e\u653b\u9020\u6210 3 \u500d\u4f24\u5bb3'),
-    ('greedy', '\u8d2a\u5fc3', 1, '\u666e\u53ca', 0.75, 'greedy', 46, 456, 4, 4, 'finish_weak',
-     '\u6253\u6700\u6613\u51fb\u6740\u76ee\u6807',
-     '\u88ab\u52a8\uff1a\u4f18\u5148\u653b\u51fb\u5c04\u7a0b\u5185\u751f\u547d\u6700\u4f4e\u7684\u654c\u4eba'),
-    ('sort', '\u6392\u5e8f', 1, '\u666e\u53ca', 0.75, 'greedy', 40, 404, 4, 4, 'sort_line',
-     '\u91cd\u6392\u4e00\u884c\u6216\u4e00\u5217',
-     '\u6280\u80fd\uff1a\u6253\u4e71\u5c04\u7a0b\u5185\u540c\u4e00\u884c\u654c\u4eba\u7684\u7ad9\u4f4d\uff0c\u5e76\u9020\u6210 30% \u4f24\u5bb3'),
-    ('dfs', 'DFS', 1, '\u666e\u53ca', 0.75, 'search', 44, 438, 4, 4, 'chain_kill',
-     '\u4e00\u8def\u6df1\u5165\uff0c\u51fb\u6740\u7eed\u884c',
-     '\u88ab\u52a8\uff1a\u51fb\u6740\u540e\u7acb\u523b\u8ffd\u52a0\u4e00\u6b21\u653b\u51fb\uff0c\u672c\u573a\u6700\u591a\u8ffd\u52a0 3 \u6b21'),
-    ('diff', '\u5dee\u5206', 1, '\u666e\u53ca', 0.75, 'diff', 35, 335, 4, 4, 'delayed_line',
-     '\u5ef6\u8fdf\u6574\u884c\u4f24\u5bb3',
-     '\u6280\u80fd\uff1a\u7ed9\u5c04\u7a0b\u5185\u6574\u884c\u654c\u4eba\u6302\u5ef6\u8fdf\u4f24\u5bb3\uff0c2 \u79d2\u540e\u7ed3\u7b97 150%'),
-    ('xor', '\u5f02\u6216', 1, '\u666e\u53ca', 0.75, 'bitwise', 28, 280, 4, 4, 'swap_stats',
-     '\u4ea4\u6362\u654c\u4eba\u5c5e\u6027',
-     '\u6280\u80fd\uff1a\u4e0e\u5c04\u7a0b\u5185\u653b\u51fb\u6700\u9ad8\u7684\u654c\u4eba\u4ea4\u6362\u653b\u51fb\u529b\uff0c\u6301\u7eed 6 \u79d2'),
-    ('gcd', 'gcd', 1, '\u666e\u53ca', 0.75, 'number_theory', 44, 437, 4, 4, 'link_ally',
-     '\u94fe\u63a5\u76f8\u90bb\u53cb\u519b',
-     '\u88ab\u52a8\uff1a\u76f8\u90bb\u53cb\u519b\u53d7\u4f24\u65f6\uff0c\u81ea\u8eab\u5206\u62c5 30%'),
-    ('bfs', 'BFS', 2, '\u666e\u53ca', 0.75, 'search', 50, 500, 6, 9, 'aoe_debuff',
-     '\u5168\u573a\u6269\u6563\uff0c\u9650\u65f6\u51cf\u901f',
-     '\u6280\u80fd\uff1a\u5168\u573a\u654c\u4eba\u53d7 35% \u4f24\u5bb3\u5e76\u51cf\u901f 3 \u79d2\uff08\u666e\u653b\u51c6\u5907\u901f\u5ea6\u964d\u4e3a 2/3\uff09'),
-    ('pigeonhole', '\u9e3d\u5de2\u539f\u7406', 2, '\u666e\u53ca', 0.75, 'combinatorics', 75, 727, 6, 9, 'crowd_crit',
-     '\u5bc6\u96c6\u5fc5\u66b4\u51fb',
-     '\u88ab\u52a8\uff1a\u76ee\u6807\u5468\u56f4 3\xd73 \u5185\u9664\u76ee\u6807\u5916\u654c\u4eba \u22653 \u65f6\uff0c\u672c\u6b21\u4f24\u5bb3\u7ffb\u500d'),
-    ('prime_sieve', '\u8d28\u6570\u7b5b', 2, '\u666e\u53ca', 0.75, 'math', 64, 636, 6, 9, 'prime_round',
-     '\u8d28\u6570\u56de\u5408\u7206\u53d1',
-     '\u88ab\u52a8\uff1a\u8d28\u6570\u56de\u5408\u4f24\u5bb3 \xd71.8'),
-    ('mod_op', '\u6a21\u8fd0\u7b97', 2, '\u666e\u53ca', 0.75, 'math', 62, 619, 6, 9, 'every_n',
-     '\u6bcf\u7b2cN\u6b21\u653b\u51fb\u89e6\u53d1',
-     '\u88ab\u52a8\uff1a\u6bcf\u7b2c 3 \u6b21\u666e\u653b\u9020\u6210 2.5 \u500d\u4f24\u5bb3'),
-    ('shift', '\u79fb\u4f4d', 2, '\u666e\u53ca', 0.75, 'bitwise', 76, 754, 6, 9, 'shift_stats',
-     '\u653b\u51fb\u7ffb\u500d\u751f\u547d\u51cf\u534a',
-     '\u88ab\u52a8\uff1a\u5165\u573a\u653b\u51fb \xd72\u3001\u751f\u547d\u4e0a\u9650 \xd70.5'),
-    ('range_dp', '\u533a\u95f4 DP', 2, '\u63d0\u9ad8', 1.05, 'dynamic_programming', 66, 647, 6, 9, 'range_aoe',
-     '\u8fde\u7eed\u533a\u95f4\u4f24\u5bb3',
-     '\u6280\u80fd\uff1a\u5bf9\u76ee\u6807\u53ca\u5176\u5de6\u53f3\u76f8\u90bb\u683c\u9020\u6210 80% \u4f24\u5bb3'),
-    ('segment_tree', '\u7ebf\u6bb5\u6811', 2, '\u63d0\u9ad8', 1.05, 'data_structure', 64, 632, 6, 9, 'seg_query',
-     '\u533a\u95f4\u67e5\u8be2\uff0c\u61d2\u6807\u8bb0\u4e0b\u653e',
-     '\u88ab\u52a8\uff1a\u6bcf\u7b2c 4 \u6b21\u666e\u653b\u989d\u5916\u5bf9\u5c04\u7a0b\u5185\u5168\u4f53\u654c\u4eba\u9020\u6210 60% \u4f24\u5bb3'),
-    ('sqrt_block', '\u5206\u5757', 2, '\u63d0\u9ad8', 1.05, 'data_structure', 67, 655, 6, 9, 'block_aoe',
-     '2\xd72 \u5757\u63a7\u5236',
-     '\u6280\u80fd\uff1a\u5bf9\u5c04\u7a0b\u5185\u76ee\u6807\u6240\u5728\u7684\u56fa\u5b9a 2\xd72 \u68cb\u76d8\u5206\u5757\u9020\u6210 70% \u4f24\u5bb3'),
-    ('pruning', '\u526a\u679d', 2, '\u63d0\u9ad8', 1.05, 'search', 55, 539, 6, 9, 'shield_on_low',
-     '\u5f31\u653b\u51fb\u8f6c\u62a4\u76fe',
-     '\u88ab\u52a8\uff1a\u5355\u6b21\u4f24\u5bb3\u4f4e\u4e8e\u81ea\u8eab\u653b\u51fb\u529b 50% \u65f6\uff0c\u51cf\u514d 50% \u5e76\u8f6c\u5316\u4e3a\u62a4\u76fe'),
-    ('ids', '\u8fed\u4ee3\u52a0\u6df1', 2, '\u63d0\u9ad8', 1.05, 'search', 76, 750, 6, 9, 'grow_range',
-     '\u8303\u56f4\u9010\u56de\u5408+1',
-     '\u88ab\u52a8\uff1a\u7b2c 1 \u56de\u5408\u4f7f\u7528\u57fa\u7840\u5c04\u7a0b\uff0c\u6b64\u540e\u6bcf\u56de\u5408\u5c04\u7a0b +1'),
-    ('merge_sort', '\u5f52\u5e76\u6392\u5e8f', 2, '\u63d0\u9ad8', 1.05, 'divide_conquer', 74, 739, 6, 9, 'merge_ally',
-     '\u5408\u5e76\u76f8\u90bb\u5c5e\u6027',
-     '\u88ab\u52a8\uff1a\u5165\u573a\u65f6\u4e0e\u4e0a\u4e0b\u5de6\u53f3\u76f8\u90bb\u53cb\u519b\u8fde\u6210\u7684\u5206\u7ec4\u5747\u5206\u5f53\u524d\u751f\u547d\uff0c\u4e0d\u8d85\u5404\u81ea\u4e0a\u9650'),
-    ('quick_sort', '\u5feb\u901f\u6392\u5e8f', 2, '\u63d0\u9ad8', 1.05, 'divide_conquer', 60, 590, 6, 9, 'partition',
-     '\u6309\u653b\u51fb\u5206\u533a',
-     '\u6280\u80fd\uff1a\u5bf9\u5c04\u7a0b\u5185\u653b\u51fb\u529b\u6700\u9ad8\u7684\u4e00\u534a\u654c\u4eba\u9020\u6210 100% \u4f24\u5bb3'),
-    ('divide', '\u5206\u6cbb', 2, '\u63d0\u9ad8', 1.05, 'divide_conquer', 57, 558, 6, 9, 'divide_conquer',
-     '\u5206\u6bb5\u5904\u7406\u518d\u5408\u5e76',
-     '\u6280\u80fd\uff1a\u5c04\u7a0b\u5185\u5168\u4f53\u53d7 50% \u4f24\u5bb3\uff0c\u82e5\u65e0\u4eba\u9635\u4ea1\u518d\u8865\u4e00\u6b21 100%'),
-    ('inverse', '\u9006\u5143', 2, '\u63d0\u9ad8', 1.05, 'number_theory', 63, 626, 6, 9, 'thorns',
-     '\u53d7\u51fb\u53cd\u4f24',
-     '\u88ab\u52a8\uff1a\u53d7\u5230\u666e\u653b\u65f6\u53cd\u5f39 35% \u4f24\u5bb3'),
-    ('bitmask_dp', '\u72b6\u538b DP', 3, '\u63d0\u9ad8', 1.05, 'dynamic_programming', 79, 800, 9, 16, 'compress_line',
-     '\u538b\u7f29\u6574\u884c\u53cb\u519b',
-     '\u6280\u80fd\uff1a\u6c47\u603b\u81ea\u8eab\u4e0e\u540c\u884c\u53cb\u519b\u653b\u51fb\u529b\uff0c\u5bf9\u5c04\u7a0b\u5185\u76ee\u6807\u6240\u5728\u884c\u654c\u4eba\u9020\u6210\u7b49\u503c\u4f24\u5bb3'),
-    ('monotonic_queue', '\u5355\u8c03\u961f\u5217', 3, '\u63d0\u9ad8', 1.05, 'data_structure', 111, 1115, 9, 16, 'sliding_max',
-     '\u6ed1\u7a97\u653b\u51fb\u6700\u5f3a\u8005',
-     '\u88ab\u52a8\uff1a\u4f18\u5148\u653b\u51fb\u5c04\u7a0b\u5185\u653b\u51fb\u529b\u6700\u9ad8\u7684\u654c\u4eba'),
-    ('a_star', 'A*', 3, '\u63d0\u9ad8', 1.05, 'search', 110, 1100, 9, 16, 'heuristic',
-     '\u542f\u53d1\u5f0f\u4f30\u4ef7 f=g+h',
-     '\u88ab\u52a8\uff1a\u6309\u300c\u8ddd\u79bb + \u5269\u4f59\u751f\u547d/\u653b\u51fb\u300d\u9009\u4f30\u4ef7\u6700\u4f4e\u7684\u76ee\u6807\uff0c\u5bf9\u5176\u4f24\u5bb3 \u00d71.25'),
-    ('bidirectional', '\u53cc\u5411\u641c\u7d22', 3, '\u63d0\u9ad8', 1.05, 'search', 86, 840, 9, 16, 'pincer',
-     '\u4e24\u7aef\u5939\u51fb',
-     '\u6280\u80fd\uff1a\u5bf9\u5c04\u7a0b\u5185\u6700\u8fd1\u4e0e\u6700\u8fdc\u7684\u654c\u4eba\u5404\u9020\u6210 120% \u4f24\u5bb3'),
-    ('fermat', '\u8d39\u9a6c\u5c0f\u5b9a\u7406', 3, '\u63d0\u9ad8', 1.05, 'number_theory', 96, 954, 9, 16, 'mod_cycle',
-     '\u6a21\u5e42\u5468\u671f\uff0c\u5f52\u96f6\u7206\u53d1',
-     '\u88ab\u52a8\uff1a7 \u51fb\u4e3a\u4e00\u4e2a\u6a21\u5468\u671f\uff0c\u500d\u7387\u7531 1.3 \u9010\u51fb\u964d\u5230 0.8\uff0c\u7b2c 7 \u51fb \u00d72.0'),
-    ('expectation', '\u671f\u671b', 3, '\u63d0\u9ad8', 1.05, 'probability', 98, 970, 9, 16, 'expectation',
-     '\u968f\u673a\u8f6c\u56fa\u5b9a',
-     '\u88ab\u52a8\uff1a\u666e\u653b\u4f24\u5bb3\u6052\u5b9a \xd71.25'),
-    ('sweep_line', '\u626b\u63cf\u7ebf', 3, '\u63d0\u9ad8', 1.05, 'geometry', 94, 920, 9, 16, 'sweep',
-     '\u7ebf\u4e0a\u9012\u589e\u4f24\u5bb3',
-     '\u6280\u80fd\uff1a\u5c04\u7a0b\u5185\u76ee\u6807\u540c\u884c\u81f3\u591a 3 \u540d\u654c\u4eba\u6309\u8ddd\u79bb\u7531\u8fd1\u5230\u8fdc\uff0c\u53d7 60%/90%/120% \u4f24\u5bb3'),
-    ('cdq', 'CDQ \u5206\u6cbb', 3, '\u7701\u9009', 1.25, 'divide_conquer', 96, 961, 9, 16, 'cdq',
-     '\u524d\u5f31\u540e\u7206',
-     '\u88ab\u52a8\uff1a\u6218\u6597\u524d 10 \u79d2\u4f24\u5bb3 \xd70.6\uff0c\u4e4b\u540e \xd71.8'),
-    ('spfa', 'SPFA', 3, '\u63d0\u9ad8', 1.05, 'search', 120, 1000, 9, 16, 'spfa_stall',
-     '\u5e73\u65f6\u8dd1\u5f97\u98de\u5feb\uff0c\u9047\u5230\u6570\u636e\u5c31\u5361\u4e86',
-     '\u88ab\u52a8\uff1a\u653b\u901f \xd71.5\uff0c\u666e\u653b\u4f24\u5bb3 \xd71.2\uff1b\u6bcf\u6b21\u666e\u653b\u540e\u6709 20% \u6982\u7387\u300c\u5361\u4e86\u300d\uff0c\u4e0b\u4e00\u6b21\u666e\u653b\u989d\u5916\u5ef6\u8fdf 4 \u79d2'),
-    ('o2', 'O2 \u4f18\u5316', 3, '\u63d0\u9ad8', 1.05, 'optimization', 0, 280, 9, 16, 'o2_aura',
-     '\u81ea\u5df1\u4e0d\u8dd1\uff0c\u8ba9\u961f\u53cb\u8dd1\u5f97\u66f4\u5feb',
-     '\u88ab\u52a8\uff1a\u65e0\u6cd5\u653b\u51fb\uff0c\u539f\u5730\u4e3a\u5468\u56f4\u516b\u683c\u53cb\u519b\u63d0\u4f9b\u653b\u901f \xd72\uff1b\u540c\u540d\u5149\u73af\u4e0d\u53e0\u52a0\uff0c\u79bb\u5f00\u8303\u56f4\u6216\u81ea\u8eab\u9635\u4ea1\u540e\u5931\u6548'),
-    ('genetic', '\u9057\u4f20\u7b97\u6cd5', 4, '\u7701\u9009', 1.25, 'search', 152, 1510, 13, 25, 'genetic',
-     '\u7ee7\u627f\u5e76\u53d8\u5f02',
-     '\u88ab\u52a8\uff1a\u6bcf\u6b21\u51fb\u6740\u6c38\u4e45 +15% \u653b\u51fb\uff08\u6700\u591a 3 \u5c42\uff09'),
-    ('matrix_pow', '\u77e9\u9635\u5feb\u901f\u5e42', 5, '\u7701\u9009', 1.25, 'math', 155, 1545, 15, 31, 'matrix_pow',
-     '\u653b\u51fb\xd71.5\uff0c\u751f\u547d-10%',
-     '\u88ab\u52a8\uff1a\u5165\u573a\u653b\u51fb \xd71.5\u3001\u751f\u547d\u4e0a\u9650 \xd70.9\uff1b\u6bcf 6 \u79d2\u653b\u51fb \xd71.2\uff08\u6700\u591a 3 \u5c42\uff09'),
-    ('two_pointers', '\u53cc\u6307\u9488', 1, '\u666e\u901a', 0.75, 'greedy', 42, 410, 4, 4, 'pierce',
-     '\u8d2f\u7a7f\u4e00\u7ebf',
-     '\u88ab\u52a8\uff1a\u666e\u653b\u547d\u4e2d\u540e\uff0c\u5bf9\u76ee\u6807\u6b63\u540e\u65b9\u540c\u5217\u76f8\u90bb\u7684\u654c\u4eba\u8ffd\u52a0 50% \u4f24\u5bb3'),
-    ('prefix_sum', '\u524d\u7f00\u548c', 1, '\u666e\u901a', 0.75, 'diff', 39, 392, 4, 4, 'prefix_growth',
-     '\u524d\u7f00\u7d2f\u52a0\uff0c\u8d8a\u6218\u8d8a\u5f3a',
-     '\u88ab\u52a8\uff1a\u6bcf\u6b21\u666e\u653b\u4f7f\u4f24\u5bb3 +10%\uff08\u6700\u591a 6 \u5c42\uff09\uff0c\u540c\u4e00\u573a\u6218\u6597\u6301\u7eed\u7d2f\u79ef'),
-    ('huffman', '\u54c8\u592b\u66fc\u7f16\u7801', 1, '\u666e\u901a', 0.75, 'greedy', 40, 400, 4, 4, 'lifesteal',
-     '\u5e26\u6743\u8def\u5f84\u56de\u8840',
-     '\u88ab\u52a8\uff1a\u666e\u653b\u9020\u6210\u4f24\u5bb3\u540e\uff0c\u56de\u590d\u8be5\u6b21\u5b9e\u9645\u4f24\u5bb3 30% \u7684\u751f\u547d\uff08\u4e0d\u8d85\u8fc7\u4e0a\u9650\uff09'),
-    ('topo_sort', '\u62d3\u6251\u6392\u5e8f', 2, '\u666e\u901a', 0.75, 'graph_theory', 58, 575, 6, 9, 'freeze',
-     '\u51bb\u7ed3\u4f9d\u8d56\u73af',
-     '\u6280\u80fd\uff1a\u5c04\u7a0b\u5185\u5168\u4f53\u654c\u4eba\u53d7 40% \u4f24\u5bb3\u5e76\u505c\u653b 2 \u79d2'),
-    ('kmp', 'KMP', 2, '\u63d0\u9ad8', 1.05, 'string', 66, 650, 6, 9, 'kmp_next',
-     '\u5931\u914d\u4e0d\u56de\u9000\uff0cnext \u8868\u8df3\u8f6c',
-     '\u88ab\u52a8\uff1a\u672a\u51fb\u6740\u76ee\u6807\u65f6\u4e0b\u6b21\u4f24\u5bb3 +10%\uff08\u6700\u591a 5 \u5c42\uff09\uff0c\u51fb\u6740\u540e\u6e05\u96f6\u91cd\u6765'),
-    ('prim', '\u6700\u5c0f\u751f\u6210\u6811', 2, '\u63d0\u9ad8', 1.05, 'graph_theory', 63, 628, 6, 9, 'mst_link',
-     '\u8fde\u8fb9\u6210\u7f51\uff0c\u5171\u62c5\u51b2\u51fb',
-     '\u88ab\u52a8\uff1a\u5165\u573a\u65f6\u6bcf\u6709\u4e00\u540d\u6b63\u4ea4\u76f8\u90bb\u53cb\u519b\uff0c\u51cf\u4f24 6%\uff08\u6700\u591a 4 \u8fb9 / 24%\uff09'),
-    ('flood_fill', '\u6cdb\u6d2a\u586b\u5145', 2, '\u63d0\u9ad8', 1.05, 'search', 62, 615, 6, 9, 'splash',
-     '\u56db\u90bb\u6269\u6563',
-     '\u88ab\u52a8\uff1a\u666e\u653b\u65f6\uff0c\u5bf9\u76ee\u6807\u4e0a\u4e0b\u5de6\u53f3\u76f8\u90bb\u7684\u654c\u4eba\u5404\u9020\u6210 35% \u4f24\u5bb3'),
-    ('ac_automaton', 'AC \u81ea\u52a8\u673a', 3, '\u63d0\u9ad8', 1.05, 'string', 92, 905, 9, 16, 'multi_match',
-     'fail \u94fe\uff0c\u4e00\u6b21\u626b\u63cf\u591a\u547d\u4e2d',
-     '\u88ab\u52a8\uff1a\u666e\u653b\u540e\u5bf9\u5c04\u7a0b\u5185\u6240\u6709\u540c\u540d\u654c\u4eba\u5404\u8ffd\u52a0 30% \u4f24\u5bb3'),
-    ('tarjan', '\u5f3a\u8fde\u901a\u5206\u91cf', 3, '\u63d0\u9ad8', 1.05, 'graph_theory', 95, 940, 9, 16, 'scc_mark',
-     '\u73af\u5185\u4e92\u76f8\u6807\u8bb0',
-     '\u88ab\u52a8\uff1a\u666e\u653b\u7ed9\u76ee\u6807\u53e0\u52a0 1 \u5c42\u6807\u8bb0\uff0c\u6bcf\u5c42\u4f7f\u5176\u627f\u53d7\u4f24\u5bb3 +8%\uff08\u6700\u591a 3 \u5c42\uff09'),
-    ('minimax', '\u6781\u5c0f\u5316\u6781\u5927', 3, '\u63d0\u9ad8', 1.05, 'game_theory', 105, 1030, 9, 16, 'rampage',
-     '\u52a3\u52bf\u65f6\u640f\u5230\u5e95',
-     '\u88ab\u52a8\uff1a\u81ea\u8eab\u751f\u547d\u4f4e\u4e8e\u4e0a\u9650 50% \u65f6\uff0c\u653b\u51fb \xd71.6'),
-    ('suffix_array', '\u540e\u7f00\u6570\u7ec4', 3, '\u63d0\u9ad8', 1.05, 'string', 99, 980, 9, 16, 'lcp_chain',
-     '\u6700\u957f\u516c\u5171\u524d\u7f00',
-     '\u88ab\u52a8\uff1a\u8fde\u7eed\u653b\u51fb\u540c\u540d\u654c\u4eba\u65f6\u4f24\u5bb3 \u00d71.5\uff0c\u5207\u6362\u76ee\u6807\u65f6 \u00d70.8'),
-    ('splay', '\u4f38\u5c55\u6811', 4, '\u7701\u9009', 1.25, 'data_structure', 148, 1480, 13, 25, 'splay_rotate',
-     '\u8bbf\u95ee\u5373\u65cb\u6839\uff0c\u644a\u8fd8\u4ee3\u4ef7',
-     '\u88ab\u52a8\uff1a\u6bcf\u6b21\u666e\u653b +7% \u4f24\u5bb3\uff08\u6700\u591a 6 \u5c42\uff09\uff0c\u4f46\u6bcf\u6b21\u53d7\u4f24\u635f\u5931\u4e00\u534a\u5c42\u6570'),
-    ('network_flow', '\u7f51\u7edc\u6d41', 4, '\u7701\u9009', 1.25, 'graph_theory', 150, 1495, 13, 25, 'min_cut',
-     '\u6700\u5c0f\u5272\uff0c\u5bb9\u91cf\u74f6\u9888',
-     '\u6280\u80fd\uff1a\u5c04\u7a0b\u5185\u5168\u4f53\u53d7 35% \u4f24\u5bb3\uff08\u654c\u4eba\u8d8a\u591a\u5355\u4f53\u8d8a\u4f4e\uff09\uff0c\u8840\u91cf\u6700\u9ad8\u8005\u989d\u5916 60%'),
-    ('fft', '\u5feb\u901f\u5085\u91cc\u53f6\u53d8\u6362', 5, '\u7701\u9009', 1.25, 'math', 153, 1530, 15, 31, 'fft_butterfly',
-     '\u8776\u5f62\u8fd0\u7b97\uff0c\u5947\u5076\u76f8\u62b5',
-     '\u88ab\u52a8\uff1a\u5947\u6570\u6b21\u666e\u653b \u00d70.75\u3001\u5076\u6570\u6b21 \u00d71.7\uff1b\u9ad8\u9762\u677f\u7684\u4ee3\u4ef7\u662f\u8f93\u51fa\u6781\u4e0d\u7a33\u5b9a'),
-    ('suffix_automaton', '\u540e\u7f00\u81ea\u52a8\u673a', 5, '\u7701\u9009', 1.25, 'string', 156, 1550, 15, 31, 'sam_compress',
-     '\u72b6\u6001\u538b\u7f29\uff0c\u4ee5\u8840\u6362\u653b',
-     '\u88ab\u52a8\uff1a\u6bcf\u540d\u540c\u540d\u53cb\u519b\u4f7f\u653b\u51fb +15%\uff08\u542b\u81ea\u5df1\uff09\uff1b\u5408\u5e76\u72b6\u6001\u4f1a\u6324\u5360\u751f\u547d\u4e0a\u9650 -8%\uff08\u72ec\u82d7\u4e0d\u6263\uff0c\u6700\u591a 5 \u5c42\uff09'),
+    ('linear_dp', '线性 DP', 1, '普及', 0.75, 'dynamic_programming', 41, 401, 4, 4, 'line',
+     '沿行/列直线攻击',
+     '技能：对射程内目标所在行或列中敌人更多的一条线造成 50% 伤害'),
+    ('tree_array', '树状数组', 1, '普及', 0.75, 'data_structure', 37, 364, 4, 4, 'stack_ally',
+     '友军行动叠层',
+     '被动：每次友军普攻或施法 +1 层，每层 +8% 普攻伤害（上限 6 层）'),
+    ('monotonic_stack', '单调栈', 1, '普及', 0.75, 'data_structure', 38, 371, 4, 4, 'charge_burst',
+     '积累后爆发',
+     '被动：每第 4 次普攻造成 3 倍伤害'),
+    ('greedy', '贪心', 1, '普及', 0.75, 'greedy', 46, 456, 4, 4, 'finish_weak',
+     '打最易击杀目标',
+     '被动：优先攻击射程内生命最低的敌人'),
+    ('sort', '排序', 1, '普及', 0.75, 'greedy', 40, 404, 4, 4, 'sort_line',
+     '重排一行或一列',
+     '技能：打乱射程内同一行敌人的站位，并造成 30% 伤害'),
+    ('dfs', 'DFS', 1, '普及', 0.75, 'search', 44, 438, 4, 4, 'chain_kill',
+     '一路深入，击杀续行',
+     '被动：击杀后立刻追加一次攻击，本场最多追加 3 次'),
+    ('diff', '差分', 1, '普及', 0.75, 'diff', 35, 335, 4, 4, 'delayed_line',
+     '延迟整行伤害',
+     '技能：给射程内整行敌人挂延迟伤害，2 秒后结算 150%'),
+    ('xor', '异或', 1, '普及', 0.75, 'bitwise', 28, 280, 4, 4, 'swap_stats',
+     '交换敌人属性',
+     '技能：与射程内攻击最高的敌人交换攻击力，持续 6 秒'),
+    ('gcd', 'gcd', 1, '普及', 0.75, 'number_theory', 44, 437, 4, 4, 'link_ally',
+     '链接相邻友军',
+     '被动：相邻友军受伤时，自身分担 30%'),
+    ('bfs', 'BFS', 2, '普及', 0.75, 'search', 50, 500, 6, 9, 'aoe_debuff',
+     '全场扩散，限时减速',
+     '技能：全场敌人受 35% 伤害并减速 3 秒（普攻准备速度降为 2/3）'),
+    ('pigeonhole', '鸽巢原理', 2, '普及', 0.75, 'combinatorics', 75, 727, 6, 9, 'crowd_crit',
+     '密集必暴击',
+     '被动：目标周围 3\xd73 内除目标外敌人 ≥3 时，本次伤害翻倍'),
+    ('prime_sieve', '质数筛', 2, '普及', 0.75, 'math', 64, 636, 6, 9, 'prime_round',
+     '质数回合爆发',
+     '被动：质数回合伤害 \xd71.8'),
+    ('mod_op', '模运算', 2, '普及', 0.75, 'math', 62, 619, 6, 9, 'every_n',
+     '每第N次攻击触发',
+     '被动：每第 3 次普攻造成 2.5 倍伤害'),
+    ('shift', '移位', 2, '普及', 0.75, 'bitwise', 76, 754, 6, 9, 'shift_stats',
+     '攻击翻倍生命减半',
+     '被动：入场攻击 \xd72、生命上限 \xd70.5'),
+    ('range_dp', '区间 DP', 2, '提高', 1.05, 'dynamic_programming', 66, 647, 6, 9, 'range_aoe',
+     '连续区间伤害',
+     '技能：对目标及其左右相邻格造成 80% 伤害'),
+    ('segment_tree', '线段树', 2, '提高', 1.05, 'data_structure', 64, 632, 6, 9, 'seg_query',
+     '区间查询，懒标记下放',
+     '被动：每第 4 次普攻额外对射程内全体敌人造成 60% 伤害'),
+    ('sqrt_block', '分块', 2, '提高', 1.05, 'data_structure', 67, 655, 6, 9, 'block_aoe',
+     '2\xd72 块控制',
+     '技能：对射程内目标所在的固定 2\xd72 棋盘分块造成 70% 伤害'),
+    ('pruning', '剪枝', 2, '提高', 1.05, 'search', 55, 539, 6, 9, 'shield_on_low',
+     '弱攻击转护盾',
+     '被动：单次伤害低于自身攻击力 50% 时，减免 50% 并转化为护盾'),
+    ('ids', '迭代加深', 2, '提高', 1.05, 'search', 76, 750, 6, 9, 'grow_range',
+     '范围逐回合+1',
+     '被动：第 1 回合使用基础射程，此后每回合射程 +1'),
+    ('merge_sort', '归并排序', 2, '提高', 1.05, 'divide_conquer', 74, 739, 6, 9, 'merge_ally',
+     '合并相邻属性',
+     '被动：入场时与上下左右相邻友军连成的分组均分当前生命，不超各自上限'),
+    ('quick_sort', '快速排序', 2, '提高', 1.05, 'divide_conquer', 60, 590, 6, 9, 'partition',
+     '按攻击分区',
+     '技能：对射程内攻击力最高的一半敌人造成 100% 伤害'),
+    ('divide', '分治', 2, '提高', 1.05, 'divide_conquer', 57, 558, 6, 9, 'divide_conquer',
+     '分段处理再合并',
+     '技能：射程内全体受 50% 伤害，若无人阵亡再补一次 100%'),
+    ('inverse', '逆元', 2, '提高', 1.05, 'number_theory', 63, 626, 6, 9, 'thorns',
+     '受击反伤',
+     '被动：受到普攻时反弹 35% 伤害'),
+    ('bitmask_dp', '状压 DP', 3, '提高', 1.05, 'dynamic_programming', 79, 800, 9, 16, 'compress_line',
+     '压缩整行友军',
+     '技能：汇总自身与同行友军攻击力，对射程内目标所在行敌人造成等值伤害'),
+    ('monotonic_queue', '单调队列', 3, '提高', 1.05, 'data_structure', 111, 1115, 9, 16, 'sliding_max',
+     '滑窗攻击最强者',
+     '被动：优先攻击射程内攻击力最高的敌人'),
+    ('a_star', 'A*', 3, '提高', 1.05, 'search', 110, 1100, 9, 16, 'heuristic',
+     '启发式估价 f=g+h',
+     '被动：按「距离 + 剩余生命/攻击」选估价最低的目标，对其伤害 ×1.25'),
+    ('bidirectional', '双向搜索', 3, '提高', 1.05, 'search', 86, 840, 9, 16, 'pincer',
+     '两端夹击',
+     '技能：对射程内最近与最远的敌人各造成 120% 伤害'),
+    ('fermat', '费马小定理', 3, '提高', 1.05, 'number_theory', 96, 954, 9, 16, 'mod_cycle',
+     '模幂周期，归零爆发',
+     '被动：7 击为一个模周期，倍率由 1.3 逐击降到 0.8，第 7 击 ×2.0'),
+    ('expectation', '期望', 3, '提高', 1.05, 'probability', 98, 970, 9, 16, 'expectation',
+     '随机转固定',
+     '被动：普攻伤害恒定 \xd71.25'),
+    ('sweep_line', '扫描线', 3, '提高', 1.05, 'geometry', 94, 920, 9, 16, 'sweep',
+     '线上递增伤害',
+     '技能：射程内目标同行至多 3 名敌人按距离由近到远，受 60%/90%/120% 伤害'),
+    ('cdq', 'CDQ 分治', 3, '省选', 1.25, 'divide_conquer', 96, 961, 9, 16, 'cdq',
+     '前弱后爆',
+     '被动：战斗前 10 秒伤害 \xd70.6，之后 \xd71.8'),
+    ('spfa', 'SPFA', 3, '提高', 1.05, 'search', 120, 1000, 9, 16, 'spfa_stall',
+     '平时跑得飞快，遇到数据就卡了',
+     '被动：攻速 \xd71.5，普攻伤害 \xd71.2；每次普攻后有 20% 概率「卡了」，下一次普攻额外延迟 4 秒'),
+    ('o2', 'O2 优化', 3, '提高', 1.05, 'optimization', 0, 280, 9, 16, 'o2_aura',
+     '自己不跑，让队友跑得更快',
+     '被动：无法攻击，原地为周围八格友军提供攻速 \xd72；同名光环不叠加，离开范围或自身阵亡后失效'),
+    ('genetic', '遗传算法', 4, '省选', 1.25, 'search', 152, 1510, 13, 25, 'genetic',
+     '继承并变异',
+     '被动：每次击杀永久 +15% 攻击（最多 3 层）'),
+    ('matrix_pow', '矩阵快速幂', 5, '省选', 1.25, 'math', 155, 1545, 15, 31, 'matrix_pow',
+     '攻击\xd71.5，生命-10%',
+     '被动：入场攻击 \xd71.5、生命上限 \xd70.9；每 6 秒攻击 \xd71.2（最多 3 层）'),
+    ('two_pointers', '双指针', 1, '普通', 0.75, 'greedy', 42, 410, 4, 4, 'pierce',
+     '贯穿一线',
+     '被动：普攻命中后，对目标正后方同列相邻的敌人追加 50% 伤害'),
+    ('prefix_sum', '前缀和', 1, '普通', 0.75, 'diff', 39, 392, 4, 4, 'prefix_growth',
+     '前缀累加，越战越强',
+     '被动：每次普攻使伤害 +10%（最多 6 层），同一场战斗持续累积'),
+    ('huffman', '哈夫曼编码', 1, '普通', 0.75, 'greedy', 40, 400, 4, 4, 'lifesteal',
+     '带权路径回血',
+     '被动：普攻造成伤害后，回复该次实际伤害 30% 的生命（不超过上限）'),
+    ('topo_sort', '拓扑排序', 2, '普通', 0.75, 'graph_theory', 58, 575, 6, 9, 'freeze',
+     '冻结依赖环',
+     '技能：射程内全体敌人受 40% 伤害并停攻 2 秒'),
+    ('kmp', 'KMP', 2, '提高', 1.05, 'string', 66, 650, 6, 9, 'kmp_next',
+     '失配不回退，next 表跳转',
+     '被动：未击杀目标时下次伤害 +10%（最多 5 层），击杀后清零重来'),
+    ('prim', '最小生成树', 2, '提高', 1.05, 'graph_theory', 63, 628, 6, 9, 'mst_link',
+     '连边成网，共担冲击',
+     '被动：入场时每有一名正交相邻友军，减伤 6%（最多 4 边 / 24%）'),
+    ('flood_fill', '泛洪填充', 2, '提高', 1.05, 'search', 62, 615, 6, 9, 'splash',
+     '四邻扩散',
+     '被动：普攻时，对目标上下左右相邻的敌人各造成 35% 伤害'),
+    ('ac_automaton', 'AC 自动机', 3, '提高', 1.05, 'string', 92, 905, 9, 16, 'multi_match',
+     'fail 链，一次扫描多命中',
+     '被动：普攻后对射程内所有同名敌人各追加 30% 伤害'),
+    ('tarjan', '强连通分量', 3, '提高', 1.05, 'graph_theory', 95, 940, 9, 16, 'scc_mark',
+     '环内互相标记',
+     '被动：普攻给目标叠加 1 层标记，每层使其承受伤害 +8%（最多 3 层）'),
+    ('minimax', '极小化极大', 3, '提高', 1.05, 'game_theory', 105, 1030, 9, 16, 'rampage',
+     '劣势时搏到底',
+     '被动：自身生命低于上限 50% 时，攻击 \xd71.6'),
+    ('suffix_array', '后缀数组', 3, '提高', 1.05, 'string', 99, 980, 9, 16, 'lcp_chain',
+     '最长公共前缀',
+     '被动：连续攻击同名敌人时伤害 ×1.5，切换目标时 ×0.8'),
+    ('splay', '伸展树', 4, '省选', 1.25, 'data_structure', 148, 1480, 13, 25, 'splay_rotate',
+     '访问即旋根，摊还代价',
+     '被动：每次普攻 +7% 伤害（最多 6 层），但每次受伤损失一半层数'),
+    ('network_flow', '网络流', 4, '省选', 1.25, 'graph_theory', 150, 1495, 13, 25, 'min_cut',
+     '最小割，容量瓶颈',
+     '技能：射程内全体受 35% 伤害（敌人越多单体越低），血量最高者额外 60%'),
+    ('fft', '快速傅里叶变换', 5, '省选', 1.25, 'math', 153, 1530, 15, 31, 'fft_butterfly',
+     '蝶形运算，奇偶相抵',
+     '被动：奇数次普攻 ×0.75、偶数次 ×1.7；高面板的代价是输出极不稳定'),
+    ('suffix_automaton', '后缀自动机', 5, '省选', 1.25, 'string', 156, 1550, 15, 31, 'sam_compress',
+     '状态压缩，以血换攻',
+     '被动：每名同名友军使攻击 +15%（含自己）；合并状态会挤占生命上限 -8%（独苗不扣，最多 5 层）'),
 ]
 
 RANGE_BY_COST = {1: 4, 2: 4, 3: 5, 4: 6, 5: 8}
@@ -287,7 +287,7 @@ ACTIVE_SKILLS = frozenset({
     'pincer', 'partition', 'divide_conquer', 'sweep', 'freeze', 'min_cut',
 })
 
-# \u5546\u5e97\u5237\u65b0\uff1a\u6bcf\u8f6e\u7b2c\u4e00\u6b21\u514d\u8d39\uff0c\u7b2c\u4e8c\u6b21\u8d77\u6309\u57fa\u7840\u4ef7\u683c\u9012\u589e\u3002
+# 商店刷新：每轮第一次免费，第二次起按基础价格递增。
 SHOP_FREE_REFRESHES = 1
 SHOP_REFRESH_BASE = 2
 SHOP_REFRESH_STEP = 1
@@ -300,23 +300,23 @@ CARDS = [{
     'active': c[10] in ACTIVE_SKILLS,
     'skillCost': SKILL_ENERGY_COST if c[10] in ACTIVE_SKILLS else 0,
 } for c in CARDS_RAW]
-CARD_ROLES = {'linear_dp': ('\u7ebf\u6027\u7fa4\u653b', '\u4e2d\u6392', '\u8ba9\u76ee\u6807\u884c\u6216\u5217\u805a\u96c6\uff0c\u6280\u80fd\u6309\u5c04\u7a0b\u7b5b\u9009\u3002'), 'tree_array': ('\u56e2\u961f\u6210\u957f', '\u4e2d\u540e\u6392', '\u53cb\u519b\u6bcf\u6b21\u666e\u653b\u6216\u65bd\u6cd5\u52a0\u5c42\uff0c\u9002\u5408\u884c\u52a8\u5bc6\u96c6\u7684\u9635\u5bb9\u3002'), 'monotonic_stack': ('\u5468\u671f\u7206\u53d1', '\u4e2d\u6392', '\u6bcf\u56db\u51fb\u7206\u53d1\uff0c\u907f\u514d\u8f93\u51fa\u4f4d\u8fc7\u65e9\u9635\u4ea1\u3002'), 'greedy': ('\u4f4e\u8d39\u6536\u5272', '\u4e2d\u6392', '\u4f18\u5148\u5c04\u7a0b\u5185\u6b8b\u8840\uff0c\u4e0d\u4f1a\u4e3a\u8fdc\u5904\u6b8b\u8840\u653e\u5f03\u5f53\u524d\u76ee\u6807\u3002'), 'sort': ('\u91cd\u6392\u63a7\u573a', '\u4e2d\u6392', '\u6270\u4e71\u5c04\u7a0b\u5185\u540c\u884c\u7ad9\u4f4d\uff0c\u4f24\u5bb3\u4e0d\u662f\u4e3b\u8981\u4ef7\u503c\u3002'), 'dfs': ('\u8fde\u9501\u6536\u5272', '\u4e2d\u6392', '\u51fb\u6740\u540e\u7acb\u5373\u7eed\u653b\uff0c\u672c\u573a\u6700\u591a\u8ffd\u52a0\u4e09\u6b21\u3002'), 'diff': ('\u5ef6\u65f6\u7fa4\u653b', '\u540e\u6392', '\u4f24\u5bb3\u5728\u6807\u8bb0\u4e24\u79d2\u540e\u7ed3\u7b97\uff0c\u4fdd\u62a4\u65bd\u6cd5\u8005\u4e89\u53d6\u591a\u6b21\u6807\u8bb0\u3002'), 'xor': ('\u9ad8\u653b\u53cd\u5236', '\u4fdd\u62a4\u4f4d', '\u4ea4\u6362\u5c04\u7a0b\u5185\u6700\u9ad8\u653b\u51fb\uff0c\u9002\u5408\u9488\u5bf9\u9ad8\u8d39\u6838\u5fc3\u3002'), 'gcd': ('\u5206\u62c5\u5766\u8f85', '\u524d\u4e2d\u6392', '\u4e0a\u4e0b\u5de6\u53f3\u63a5\u4f4f\u961f\u53cb\u7684\u4f24\u5bb3\uff0c\u5206\u62c5\u603b\u91cf\u4e3a30%\uff0c\u975e\u6bcf\u4e2agcd\u540430%\u3002'), 'bfs': ('\u5168\u573a\u51cf\u901f', '\u4fdd\u62a4\u4f4d', '\u5168\u573a\u4f24\u5bb3\u5e76\u9650\u65f6\u964d\u4f4e\u666e\u653b\u51c6\u5907\u901f\u5ea6\uff0c\u4e0d\u964d\u4f4e\u6280\u80fd\u9891\u7387\u3002'), 'pigeonhole': ('\u5bc6\u96c6\u514b\u5236', '\u4e2d\u6392', '\u654c\u65b9\u56f4\u7ed5\u76ee\u6807\u5bc6\u96c6\u65f6\u89e6\u53d1\u7ffb\u500d\uff0c\u5206\u6563\u654c\u4eba\u6536\u76ca\u4f4e\u3002'), 'prime_sieve': ('\u56de\u5408\u7206\u53d1', '\u4e2d\u6392', '\u7b2c2\u30013\u30015\u30017\u56de\u5408\u666e\u653b\u589e\u5f3a\uff0c\u975e\u8d28\u6570\u56de\u5408\u4fdd\u6301\u57fa\u7840\u8f93\u51fa\u3002'), 'mod_op': ('\u7a33\u5b9a\u5468\u671f\u8f93\u51fa', '\u4e2d\u6392', '\u6bcf\u4e09\u51fb2.5\u500d\uff0c\u9002\u5408\u7a33\u5b9a\u7ad9\u573a\u3002'), 'shift': ('\u73bb\u7483\u5927\u70ae', '\u540e\u6392', '\u6218\u5185\u653b\u51fb\u7ffb\u500d\u3001\u751f\u547d\u51cf\u534a\uff0c\u907f\u514d\u76f4\u63a5\u627f\u4f24\u3002'), 'range_dp': ('\u5c40\u90e8\u7fa4\u653b', '\u4e2d\u540e\u6392', '\u6253\u76ee\u6807\u53ca\u5de6\u53f3\u76f8\u90bb\u683c\uff0c\u514b\u5236\u6a2a\u5411\u5bc6\u96c6\u9635\u3002'), 'segment_tree': ('\u84c4\u529b\u7206\u53d1', '\u4e2d\u6392', '\u7ebf\u6bb5\u6811\u628a\u533a\u95f4\u4fee\u6539\u6512\u6210\u61d2\u6807\u8bb0\u518d\u4e00\u6b21\u6027\u4e0b\u653e\uff0c\u6bcf\u56db\u62cd\u6e05\u4e00\u6b21\u5168\u573a\u3002'), 'sqrt_block': ('\u5206\u5757\u7fa4\u653b', '\u4e2d\u540e\u6392', '\u56fa\u5b9a\u68cb\u76d82\xd72\u5206\u5757\uff0c\u4e0d\u662f\u4ee5\u76ee\u6807\u4e3a\u5de6\u4e0a\u89d2\u4efb\u610f\u53d6\u5757\u3002'), 'pruning': ('\u788e\u4f24\u9632\u5fa1', '\u524d\u6392', '\u53ea\u9488\u5bf9\u4f4e\u4e8e\u81ea\u8eab\u653b\u51fb50%\u7684\u5355\u6b21\u4f24\u5bb3\uff0c\u91cd\u51fb\u4ecd\u5371\u9669\u3002'), 'ids': ('\u957f\u5c40\u8fdc\u7a0b', '\u540e\u6392', '\u7b2c\u4e00\u56de\u5408\u57fa\u7840\u5c04\u7a0b\uff0c\u968f\u56de\u5408\u9010\u6b65\u589e\u52a0\u3002'), 'merge_sort': ('\u751f\u547d\u8c03\u914d', '\u90bb\u63a5\u4fdd\u62a4\u4f4d', '\u5f00\u6218\u65f6\u4e3a\u8fde\u901a\u7ec4\u5747\u5206\u5f53\u524d\u751f\u547d\uff1b\u4e0d\u662f\u51ed\u7a7a\u6cbb\u7597\u3002'), 'quick_sort': ('\u9ad8\u653b\u70b9\u7fa4\u4f24', '\u4e2d\u540e\u6392', '\u5c04\u7a0b\u5185\u6309\u5f53\u524d\u653b\u51fb\u6392\u5e8f\uff0c\u4f18\u5148\u6253\u8f93\u51fa\u4f4d\u3002'), 'divide': ('\u6761\u4ef6\u7fa4\u7206', '\u4e2d\u540e\u6392', '\u7b2c\u4e00\u6bb5\u672a\u51fb\u6740\u4efb\u4f55\u76ee\u6807\u624d\u6709\u8865\u5200\u6bb5\u3002'), 'inverse': ('\u666e\u653b\u53cd\u5236', '\u524d\u6392', '\u6309\u5b9e\u9645\u635f\u5931\u751f\u547d\u53cd\u5f39\uff0c\u4e0d\u53cd\u5f39\u88ab\u62a4\u76fe\u5438\u6536\u7684\u90e8\u5206\u3002'), 'bitmask_dp': ('\u540c\u884c\u534f\u540c\u70ae', '\u540c\u884c\u4fdd\u62a4\u4f4d', '\u540c\u884c\u9ad8\u653b\u51fb\u961f\u53cb\u589e\u5f3a\u6280\u80fd\uff0c\u9700\u517c\u987e\u5c04\u7a0b\u4e0e\u7ad9\u4f4d\u3002'), 'monotonic_queue': ('\u9ad8\u653b\u538b\u5236', '\u4e2d\u6392', '\u4f18\u5148\u653b\u51fb\u5c04\u7a0b\u5185\u6700\u9ad8\u653b\u51fb\u8005\uff0c\u53ef\u80fd\u653e\u8fc7\u6b8b\u8840\u3002'), 'a_star': ('\u9ad8\u8d39\u6536\u5272', '\u4e2d\u540e\u6392', 'A* \u7528 f=g+h \u6311\u6700\u6709\u5e0c\u671b\u7684\u8282\u70b9\uff0c\u4f18\u5148\u6253\u8fd1\u4e14\u5feb\u6b7b\u7684\u76ee\u6807\uff0c\u5e76\u81ea\u5e26 25% \u589e\u4f24\u3002'), 'bidirectional': ('\u53cc\u7aef\u6253\u51fb', '\u4e2d\u540e\u6392', '\u5c04\u7a0b\u5185\u6700\u8fd1\u4e0e\u6700\u8fdc\u5404\u4e00\u51fb\uff0c\u53ea\u6709\u4e00\u540d\u654c\u4eba\u65f6\u4e0d\u91cd\u590d\u3002'), 'fermat': ('\u56de\u5408\u7206\u53d1', '\u4e2d\u540e\u6392', '\u6a21\u5e42\u6309\u5468\u671f\u56de\u7ed5\uff0c\u524d\u534a\u5468\u671f\u5360\u4f18\u3001\u540e\u534a\u5468\u671f\u75b2\u8f6f\uff0c\u6700\u540e\u4e00\u51fb\u5f52\u96f6\u65f6\u7206\u53d1\u3002'), 'expectation': ('\u7a33\u5b9a\u5355\u4f53', '\u4e2d\u540e\u6392', '\u6052\u5b9a\u666e\u653b\u500d\u7387\uff0c\u9002\u5408\u9700\u8981\u7a33\u5b9a\u8f93\u51fa\u7684\u9635\u5bb9\u3002'), 'sweep_line': ('\u540c\u884c\u9012\u589e\u7fa4\u653b', '\u4e2d\u540e\u6392', '\u76ee\u6807\u540c\u884c\u81f3\u591a\u4e09\u4eba\uff0c\u7531\u8fd1\u5230\u8fdc\u9012\u589e\u3002'), 'cdq': ('\u540e\u7a0b\u6838\u5fc3', '\u4fdd\u62a4\u540e\u6392', '\u524d10\u79d2\u504f\u5f31\uff0c\u6b64\u540e\u7206\u53d1\uff0c\u5fc5\u987b\u4fdd\u62a4\u5230\u540e\u534a\u573a\u3002'), 'spfa': ('\u968f\u673a\u505c\u987f\u8f93\u51fa', '\u4fdd\u62a4\u4e2d\u540e\u6392', '\u653b\u901f\u5feb\u3001\u653b\u51fb\u9ad8\uff0c\u4f46\u6bcf\u6b21\u666e\u653b\u540e20%\u6982\u7387\u989d\u5916\u53614\u79d2\u3002'), 'o2': ('\u7ad9\u4f4d\u653b\u901f\u6838\u5fc3', '\u90bb\u63a5\u4fdd\u62a4\u4f4d', '0\u653b\u51fb\u3001280\u8840\uff1b\u8986\u76d6\u591a\u4eba\u518d\u6295\u5165\uff0c\u5206\u6563\u6216\u4e3b\u52a8\u6280\u80fd\u9635\u5bb9\u4e0d\u5b9c\u76f2\u5e26\u3002'), 'genetic': ('\u6c38\u4e45\u6210\u957f\u6838\u5fc3', '\u4fdd\u62a4\u4e2d\u540e\u6392', '\u51fb\u6740\u53e0\u5c42\u6700\u591a\u4e09\u5c42\uff0c\u5e78\u5b58\u68cb\u5b50\u7684\u5c42\u6570\u8de8\u56de\u5408\u4fdd\u7559\u3002'), 'matrix_pow': ('\u9ad8\u8d39\u65f6\u95f4\u6838\u5fc3', '\u540e\u6392', '\u5165\u573a\u653b\u9ad8\u8840\u51cf\uff0c6/12\u79d2\u9010\u6b65\u6210\u957f\u3002')}
+CARD_ROLES = {'linear_dp': ('线性群攻', '中排', '让目标行或列聚集，技能按射程筛选。'), 'tree_array': ('团队成长', '中后排', '友军每次普攻或施法加层，适合行动密集的阵容。'), 'monotonic_stack': ('周期爆发', '中排', '每四击爆发，避免输出位过早阵亡。'), 'greedy': ('低费收割', '中排', '优先射程内残血，不会为远处残血放弃当前目标。'), 'sort': ('重排控场', '中排', '扰乱射程内同行站位，伤害不是主要价值。'), 'dfs': ('连锁收割', '中排', '击杀后立即续攻，本场最多追加三次。'), 'diff': ('延时群攻', '后排', '伤害在标记两秒后结算，保护施法者争取多次标记。'), 'xor': ('高攻反制', '保护位', '交换射程内最高攻击，适合针对高费核心。'), 'gcd': ('分担坦辅', '前中排', '上下左右接住队友的伤害，分担总量为30%，非每个gcd各30%。'), 'bfs': ('全场减速', '保护位', '全场伤害并限时降低普攻准备速度，不降低技能频率。'), 'pigeonhole': ('密集克制', '中排', '敌方围绕目标密集时触发翻倍，分散敌人收益低。'), 'prime_sieve': ('回合爆发', '中排', '第2、3、5、7回合普攻增强，非质数回合保持基础输出。'), 'mod_op': ('稳定周期输出', '中排', '每三击2.5倍，适合稳定站场。'), 'shift': ('玻璃大炮', '后排', '战内攻击翻倍、生命减半，避免直接承伤。'), 'range_dp': ('局部群攻', '中后排', '打目标及左右相邻格，克制横向密集阵。'), 'segment_tree': ('蓄力爆发', '中排', '线段树把区间修改攒成懒标记再一次性下放，每四拍清一次全场。'), 'sqrt_block': ('分块群攻', '中后排', '固定棋盘2\xd72分块，不是以目标为左上角任意取块。'), 'pruning': ('碎伤防御', '前排', '只针对低于自身攻击50%的单次伤害，重击仍危险。'), 'ids': ('长局远程', '后排', '第一回合基础射程，随回合逐步增加。'), 'merge_sort': ('生命调配', '邻接保护位', '开战时为连通组均分当前生命；不是凭空治疗。'), 'quick_sort': ('高攻点群伤', '中后排', '射程内按当前攻击排序，优先打输出位。'), 'divide': ('条件群爆', '中后排', '第一段未击杀任何目标才有补刀段。'), 'inverse': ('普攻反制', '前排', '按实际损失生命反弹，不反弹被护盾吸收的部分。'), 'bitmask_dp': ('同行协同炮', '同行保护位', '同行高攻击队友增强技能，需兼顾射程与站位。'), 'monotonic_queue': ('高攻压制', '中排', '优先攻击射程内最高攻击者，可能放过残血。'), 'a_star': ('高费收割', '中后排', 'A* 用 f=g+h 挑最有希望的节点，优先打近且快死的目标，并自带 25% 增伤。'), 'bidirectional': ('双端打击', '中后排', '射程内最近与最远各一击，只有一名敌人时不重复。'), 'fermat': ('回合爆发', '中后排', '模幂按周期回绕，前半周期占优、后半周期疲软，最后一击归零时爆发。'), 'expectation': ('稳定单体', '中后排', '恒定普攻倍率，适合需要稳定输出的阵容。'), 'sweep_line': ('同行递增群攻', '中后排', '目标同行至多三人，由近到远递增。'), 'cdq': ('后程核心', '保护后排', '前10秒偏弱，此后爆发，必须保护到后半场。'), 'spfa': ('随机停顿输出', '保护中后排', '攻速快、攻击高，但每次普攻后20%概率额外卡4秒。'), 'o2': ('站位攻速核心', '邻接保护位', '0攻击、280血；覆盖多人再投入，分散或主动技能阵容不宜盲带。'), 'genetic': ('永久成长核心', '保护中后排', '击杀叠层最多三层，幸存棋子的层数跨回合保留。'), 'matrix_pow': ('高费时间核心', '后排', '入场攻高血减，6/12秒逐步成长。')}
 CARD_ROLES.update({
-    'two_pointers': ('\u7a7f\u900f\u8865\u5200', '\u4e2d\u6392', '\u6cbf\u654c\u4eba\u7eb5\u5217\u7ad9\u4f4d\uff0c\u666e\u653b\u80fd\u987a\u5e26\u6253\u5230\u76ee\u6807\u8eab\u540e\u7684\u654c\u4eba\u3002'),
-    'prefix_sum': ('\u540c\u6d41\u6d3e\u6210\u957f', '\u4e2d\u540e\u6392', '\u524d\u7f00\u548c\u628a\u5386\u53f2\u7d2f\u52a0\u6210\u8868\uff0c\u8d8a\u6253\u5230\u540e\u9762\u5355\u6b21\u4f24\u5bb3\u8d8a\u9ad8\uff0c\u9002\u5408\u6301\u4e45\u6218\u800c\u975e\u901f\u653b\u3002'),
-    'huffman': ('\u7eed\u822a\u8f93\u51fa', '\u4e2d\u6392', '\u666e\u653b\u6309\u5b9e\u9645\u4f24\u5bb3\u56de\u8840\uff0c\u9002\u5408\u6301\u4e45\u6218\u800c\u975e\u7206\u53d1\u3002'),
-    'topo_sort': ('\u5168\u573a\u505c\u6ede', '\u540e\u6392', '\u5c04\u7a0b\u5185\u5168\u4f53\u505c\u653b 2 \u79d2\uff0c\u4e3a\u53cb\u519b\u4e89\u53d6\u51fa\u624b\u7a97\u53e3\u3002'),
-    'kmp': ('\u7a7f\u900f\u70b9\u6740', '\u4e2d\u6392', 'KMP \u5931\u914d\u65f6\u4e0d\u56de\u9000\u4e3b\u4e32\u800c\u662f\u67e5 next \u8868\uff0c\u8fde\u7eed\u5543\u540c\u4e00\u4e2a\u76ee\u6807\u8d8a\u5543\u8d8a\u5feb\u3002'),
-    'prim': ('\u8fde\u8fb9\u534f\u540c', '\u4e2d\u540e\u6392', '\u6700\u5c0f\u751f\u6210\u6811\u7528\u6700\u5c11\u7684\u8fb9\u8fde\u901a\u5168\u573a\uff0c\u8d34\u7740\u961f\u53cb\u7ad9\u80fd\u628a\u4f24\u5bb3\u5206\u644a\u51fa\u53bb\u3002'),
-    'flood_fill': ('\u56db\u90bb\u6e85\u5c04', '\u4e2d\u6392', '\u654c\u65b9\u5bc6\u96c6\u7ad9\u4f4d\u65f6\uff0c\u4e00\u6b21\u666e\u653b\u80fd\u6e85\u5230\u591a\u4e2a\u76f8\u90bb\u76ee\u6807\u3002'),
-    'ac_automaton': ('\u591a\u70b9\u6e85\u5c04', '\u4e2d\u540e\u6392', 'AC \u81ea\u52a8\u673a\u6cbf fail \u94fe\u4e00\u6b21\u626b\u63cf\u547d\u4e2d\u6240\u6709\u6a21\u5f0f\uff0c\u5bf9\u9762\u540c\u7c7b\u8d8a\u591a\u6536\u76ca\u8d8a\u9ad8\u3002'),
-    'tarjan': ('\u540c\u73af\u5171\u632f', '\u4e2d\u540e\u6392', '\u5f3a\u8fde\u901a\u5206\u91cf\u9760 lowlink \u6807\u8bb0\u4e92\u76f8\u53ef\u8fbe\u7684\u8282\u70b9\uff0c\u88ab\u6807\u8bb0\u7684\u76ee\u6807\u4f1a\u8d8a\u6765\u8d8a\u8106\u3002'),
-    'minimax': ('\u6b8b\u8840\u7ffb\u76d8', '\u524d\u4e2d\u6392', '\u751f\u547d\u8dcc\u7834\u4e00\u534a\u540e\u653b\u51fb \xd71.6\uff0c\u9002\u5408\u9876\u5728\u524d\u6392\u6362\u8840\u3002'),
-    'suffix_array': ('\u7eb5\u5217\u7a7f\u900f', '\u4e2d\u540e\u6392', '\u540e\u7f00\u6570\u7ec4\u9760 LCP \u8861\u91cf\u76f8\u90bb\u540e\u7f00\u7684\u76f8\u4f3c\u5ea6\uff0c\u53ea\u6253\u540c\u4e00\u7c7b\u76ee\u6807\u624d\u6709\u9ad8\u6536\u76ca\u3002'),
-    'splay': ('\u9ad8\u7eed\u822a\u524d\u6392', '\u524d\u6392', '\u4f38\u5c55\u6811\u6bcf\u6b21\u8bbf\u95ee\u90fd\u628a\u8282\u70b9\u65cb\u5230\u6839\uff0c\u8d8a\u6253\u8d8a\u987a\uff1b\u4e00\u65e6\u88ab\u96c6\u706b\uff0c\u65cb\u8f6c\u5c42\u6570\u7acb\u523b\u6298\u534a\u3002'),
-    'network_flow': ('\u5168\u573a\u963b\u585e', '\u540e\u6392', '\u6700\u5927\u6d41\u53d7\u9650\u4e8e\u6700\u5c0f\u5272\uff0c\u6d41\u91cf\u88ab\u591a\u6761\u8fb9\u5206\u644a\uff0c\u4f18\u5148\u5272\u65ad\u5bb9\u91cf\u6700\u5927\u7684\u90a3\u4e00\u8def\u3002'),
-    'fft': ('\u540c\u9891\u534f\u540c', '\u540e\u6392', '\u8776\u5f62\u8fd0\u7b97\u628a\u65f6\u57df\u62c6\u6210\u5947\u5076\u4e24\u8def\u518d\u5408\u5e76\uff0c\u7b2c\u4e00\u62cd\u5f31\u3001\u7b2c\u4e8c\u62cd\u5f3a\uff0c\u5747\u503c\u7565\u9ad8\u4e8e\u666e\u901a\u5361\u3002'),
-    'suffix_automaton': ('\u7edd\u5883\u6536\u5272', '\u524d\u4e2d\u6392', '\u540e\u7f00\u81ea\u52a8\u673a\u7528\u6700\u5c11\u72b6\u6001\u5b58\u4e0b\u6240\u6709\u5b50\u4e32\uff0c\u4ee3\u4ef7\u662f\u6781\u4f4e\u7684\u6709\u6548\u751f\u547d\uff1a\u5806\u540c\u540d\u8d8a\u591a\u8d8a\u8106\u3002'),
+    'two_pointers': ('穿透补刀', '中排', '沿敌人纵列站位，普攻能顺带打到目标身后的敌人。'),
+    'prefix_sum': ('同流派成长', '中后排', '前缀和把历史累加成表，越打到后面单次伤害越高，适合持久战而非速攻。'),
+    'huffman': ('续航输出', '中排', '普攻按实际伤害回血，适合持久战而非爆发。'),
+    'topo_sort': ('全场停滞', '后排', '射程内全体停攻 2 秒，为友军争取出手窗口。'),
+    'kmp': ('穿透点杀', '中排', 'KMP 失配时不回退主串而是查 next 表，连续啃同一个目标越啃越快。'),
+    'prim': ('连边协同', '中后排', '最小生成树用最少的边连通全场，贴着队友站能把伤害分摊出去。'),
+    'flood_fill': ('四邻溅射', '中排', '敌方密集站位时，一次普攻能溅到多个相邻目标。'),
+    'ac_automaton': ('多点溅射', '中后排', 'AC 自动机沿 fail 链一次扫描命中所有模式，对面同类越多收益越高。'),
+    'tarjan': ('同环共振', '中后排', '强连通分量靠 lowlink 标记互相可达的节点，被标记的目标会越来越脆。'),
+    'minimax': ('残血翻盘', '前中排', '生命跌破一半后攻击 \xd71.6，适合顶在前排换血。'),
+    'suffix_array': ('纵列穿透', '中后排', '后缀数组靠 LCP 衡量相邻后缀的相似度，只打同一类目标才有高收益。'),
+    'splay': ('高续航前排', '前排', '伸展树每次访问都把节点旋到根，越打越顺；一旦被集火，旋转层数立刻折半。'),
+    'network_flow': ('全场阻塞', '后排', '最大流受限于最小割，流量被多条边分摊，优先割断容量最大的那一路。'),
+    'fft': ('同频协同', '后排', '蝶形运算把时域拆成奇偶两路再合并，第一拍弱、第二拍强，均值略高于普通卡。'),
+    'suffix_automaton': ('绝境收割', '前中排', '后缀自动机用最少状态存下所有子串，代价是极低的有效生命：堆同名越多越脆。'),
 })
 
 for _card in CARDS:
@@ -330,17 +330,17 @@ SHOP_WEIGHT_BASE = 2       # lower cost cards stay more common at every level
 
 
 def _fill_card_max_hp():
-    """\u628a\u6709\u6548\u751f\u547d\u4e0a\u9650\uff08\u79fb\u4f4d \xd70.5 / \u77e9\u9635\u5feb\u901f\u5e42 \xd70.9\uff09\u5199\u8fdb\u5361\u8868\uff0c\u4f9b\u524d\u7aef\u663e\u793a\u3002"""
+    """把有效生命上限（移位 \xd70.5 / 矩阵快速幂 \xd70.9）写进卡表，供前端显示。"""
     for c in CARDS:
         c['maxHp'] = effective_max_hp(c)
 
 TRAITS = {
-    'dynamic_programming': '\u52a8\u6001\u89c4\u5212', 'data_structure': '\u6570\u636e\u7ed3\u6784',
-    'greedy': '\u8d2a\u5fc3/\u6392\u5e8f', 'search': '\u641c\u7d22', 'divide_conquer': '\u5206\u6cbb',
-    'diff': '\u5dee\u5206', 'bitwise': '\u4f4d\u8fd0\u7b97', 'number_theory': '\u6570\u8bba',
-    'combinatorics': '\u7ec4\u5408\u6570\u5b66', 'probability': '\u6982\u7387\u671f\u671b',
-    'geometry': '\u8ba1\u7b97\u51e0\u4f55', 'math': '\u6570\u5b66', 'optimization': '\u4f18\u5316',
-    'graph_theory': '\u56fe\u8bba', 'string': '\u5b57\u7b26\u4e32', 'game_theory': '\u535a\u5f08',
+    'dynamic_programming': '动态规划', 'data_structure': '数据结构',
+    'greedy': '贪心/排序', 'search': '搜索', 'divide_conquer': '分治',
+    'diff': '差分', 'bitwise': '位运算', 'number_theory': '数论',
+    'combinatorics': '组合数学', 'probability': '概率期望',
+    'geometry': '计算几何', 'math': '数学', 'optimization': '优化',
+    'graph_theory': '图论', 'string': '字符串', 'game_theory': '博弈',
 }
 
 
@@ -378,7 +378,7 @@ RATING_QUIT = -30
 
 
 def _as_str(v, limit=None, default=''):
-    """\u53ea\u63a5\u53d7\u5b57\u7b26\u4e32\uff0c\u9632\u6b62 {'text': {}} \u8fd9\u7c7b\u810f\u8f93\u5165\u628a\u5904\u7406\u7ebf\u7a0b\u6253\u5d29\u3002"""
+    """只接受字符串，防止 {'text': {}} 这类脏输入把处理线程打崩。"""
     if not isinstance(v, str):
         return default
     v = v.strip()
@@ -386,7 +386,7 @@ def _as_str(v, limit=None, default=''):
 
 
 def _as_int(v, default=None):
-    """\u53ea\u63a5\u53d7\u6574\u6570\uff08bool \u4e0d\u7b97\uff09\uff0c\u975e\u6cd5\u8fd4\u56de default\u3002"""
+    """只接受整数（bool 不算），非法返回 default。"""
     if isinstance(v, bool) or not isinstance(v, int):
         return default
     return v
@@ -410,7 +410,7 @@ def level_for_round(rnd):
 
 
 def shop_refresh_cost(refreshes):
-    """\u672c\u8f6e\u7b2c n \u6b21\u5237\u65b0\u7684\u91d1\u5e01\u4ef7\u683c\uff1a\u9996\u6b21\u514d\u8d39\uff0c\u4e4b\u540e\u4ece\u57fa\u7840\u4ef7\u9010\u6b21 +1\u3002"""
+    """本轮第 n 次刷新的金币价格：首次免费，之后从基础价逐次 +1。"""
     n = max(0, int(refreshes or 0))
     if n < SHOP_FREE_REFRESHES:
         return 0
@@ -418,7 +418,7 @@ def shop_refresh_cost(refreshes):
 
 
 def board_power(board):
-    """\u5b58\u6d3b\u68cb\u5b50\u7684\u7b49\u7ea7\u683c\u5b50\u4e4b\u548c\uff1a\u6bcf\u4e2a\u5b58\u6d3b\u68cb\u5b50\u5360 1 \u683c\uff0c\u7b49\u7ea7\u5373\u661f\u7ea7\u3002"""
+    """存活棋子的等级格子之和：每个存活棋子占 1 格，等级即星级。"""
     total = 0
     for info in board.values():
         try:
@@ -476,7 +476,7 @@ _fill_card_max_hp()
 
 
 # ============================================================
-# \u6863\u6848\u4e0e Rating
+# 档案与 Rating
 # ============================================================
 def load_profiles():
     global PROFILES
@@ -504,7 +504,7 @@ def save_profiles():
 def get_profile(cid, name=None):
     with DATA_LOCK:
         if cid not in PROFILES:
-            PROFILES[cid] = {'clientId': cid, 'name': name or '\u9009\u624b',
+            PROFILES[cid] = {'clientId': cid, 'name': name or '选手',
                              'rating': DEFAULT_RATING, 'wins': 0, 'losses': 0, 'games': 0}
             save_profiles()
         elif name and PROFILES[cid].get('name') != name:
@@ -516,7 +516,7 @@ def get_profile(cid, name=None):
 def update_rating(cid, delta, result=None, name=None):
     with DATA_LOCK:
         if cid not in PROFILES:
-            PROFILES[cid] = {'clientId': cid, 'name': name or '\u9009\u624b',
+            PROFILES[cid] = {'clientId': cid, 'name': name or '选手',
                              'rating': DEFAULT_RATING, 'wins': 0, 'losses': 0, 'games': 0}
         if name:
             PROFILES[cid]['name'] = name
@@ -577,7 +577,7 @@ class Room:
         self._tick_lock = threading.Lock()
         self._ended_at = None
 
-    # ---- \u989c\u8272 --------------------------------------------------------------
+    # ---- 颜色 --------------------------------------------------------------
     def _assign_color(self, cid):
         used = set(self.colors.values())
         for i in range(MAX_PLAYERS):
@@ -587,29 +587,29 @@ class Room:
         self.colors[cid] = 0
         return 0
 
-    # ---- \u5fc3\u8df3 --------------------------------------------------------------
+    # ---- 心跳 --------------------------------------------------------------
     def _touch(self, cid):
         p = self.players.get(cid)
         if p is not None:
             p['last_seen'] = time.time()
 
-    # ---- \u8fdb\u51fa\u623f\u95f4 ----------------------------------------------------------
+    # ---- 进出房间 ----------------------------------------------------------
     def add_player(self, cid, name):
         with self.lock:
             if cid in self.players:
                 self._touch(cid)
                 return True, 'rejoined'
             if len(self.players) >= MAX_PLAYERS:
-                return False, '\u623f\u95f4\u5df2\u6ee1'
+                return False, '房间已满'
             if self.state != 'waiting':
-                return False, '\u6e38\u620f\u5df2\u5f00\u59cb'
+                return False, '游戏已开始'
             self.players[cid] = new_player(cid, name)
             self._assign_color(cid)
             self.version += 1
-            self._sys_chat(f'{name} \u52a0\u5165\u4e86\u623f\u95f4')
+            self._sys_chat(f'{name} 加入了房间')
             return True, 'joined'
 
-    # ---- \u804a\u5929 --------------------------------------------------------------
+    # ---- 聊天 --------------------------------------------------------------
     def _push_chat(self, msg):
         self.chat.append(msg)
         if len(self.chat) > 100:
@@ -624,19 +624,19 @@ class Room:
         with self.lock:
             p = self.players.get(pid)
             if not p:
-                return False, '\u73a9\u5bb6\u4e0d\u5b58\u5728'
+                return False, '玩家不存在'
             self._touch(pid)
             if not isinstance(text, str):
-                return False, '\u6d88\u606f\u683c\u5f0f\u9519\u8bef'
+                return False, '消息格式错误'
             text = text.strip()[:200]
             if not text:
-                return False, '\u6d88\u606f\u4e3a\u7a7a'
+                return False, '消息为空'
             self._push_chat({'id': uuid.uuid4().hex, 'sender': p['name'], 'senderId': pid,
                              'text': text, 'time': int(time.time() * 1000), 'system': False})
             self.version += 1
             return True, None
 
-    # ---- \u5546\u5e97 --------------------------------------------------------------
+    # ---- 商店 --------------------------------------------------------------
     def _shop_pool(self, level):
         """Unlock costs up to min(SHOP_MAX_COST, level); lower costs weigh more."""
         top = max(SHOP_MIN_COST, min(int(level or 1), SHOP_MAX_COST))
@@ -673,23 +673,23 @@ class Room:
                 continue
             p['shop'] = self._roll_shop(p['level'], owner=p)
 
-    # ---- \u5f00\u5c40 --------------------------------------------------------------
+    # ---- 开局 --------------------------------------------------------------
     def start(self, pid):
         with self.lock:
             if pid != self.host:
-                return False, '\u53ea\u6709\u623f\u4e3b\u53ef\u4ee5\u5f00\u59cb'
+                return False, '只有房主可以开始'
             if self.state != 'waiting':
-                return False, '\u6e38\u620f\u5df2\u7ecf\u5f00\u59cb'
+                return False, '游戏已经开始'
             self._touch(pid)
             n = len([p for p in self.players.values() if not p.get('dead')])
             if n < 2:
-                return False, '\u81f3\u5c11\u9700\u8981 2 \u540d\u73a9\u5bb6'
+                return False, '至少需要 2 名玩家'
             self.round = 1
             for p in self.players.values():
                 p['level'] = level_for_round(self.round)
             self._roll_all_shops()
             self._start_prep(first=True)
-            self._sys_chat(f'\u6e38\u620f\u5f00\u59cb\uff0c\u5171 {n} \u540d\u73a9\u5bb6')
+            self._sys_chat(f'游戏开始，共 {n} 名玩家')
             self.version += 1
             return True, None
 
@@ -726,15 +726,15 @@ class Room:
                         cur_hp = int(info.get('hp', max_hp))
                         info['hp'] = int(min(max_hp, cur_hp + (max_hp - cur_hp) * 0.7))
 
-    # ---- \u51c6\u5907\u671f\u64cd\u4f5c --------------------------------------------------------
+    # ---- 准备期操作 --------------------------------------------------------
     def _prep_player(self, pid):
         p = self.players.get(pid)
         if not p:
-            return None, '\u73a9\u5bb6\u4e0d\u5b58\u5728'
+            return None, '玩家不存在'
         if p.get('dead'):
-            return None, '\u4f60\u5df2\u51fa\u5c40'
+            return None, '你已出局'
         if self.state != 'prep':
-            return None, '\u5f53\u524d\u4e0d\u53ef\u64cd\u4f5c'
+            return None, '当前不可操作'
         p['last_seen'] = time.time()
         return p, None
 
@@ -745,7 +745,7 @@ class Room:
                 return False, err
             cost = shop_refresh_cost(p.get('shopRefreshes', 0))
             if p['gold'] < cost:
-                return False, '\u91d1\u5e01\u4e0d\u8db3'
+                return False, '金币不足'
             p['gold'] -= cost
             p['shopRefreshes'] = int(p.get('shopRefreshes', 0) or 0) + 1
             p['shop'] = self._roll_shop(p['level'], owner=p)
@@ -828,17 +828,17 @@ class Room:
             if err:
                 return False, err
             if not (0 <= shop_index < len(p['shop'])):
-                return False, '\u65e0\u6548\u4f4d\u7f6e'
+                return False, '无效位置'
             card = CARD_BY_ID[p['shop'][shop_index]]
             if p['gold'] < card['cost']:
-                return False, '\u91d1\u5e01\u4e0d\u8db3'
+                return False, '金币不足'
             if p['energy'] < card['energy']:
-                return False, '\u7cbe\u529b\u4e0d\u8db3'
+                return False, '精力不足'
             if p['reason'] < card['reason']:
-                return False, '\u7406\u667a\u4e0d\u8db3'
+                return False, '理智不足'
             if len(p['bench']) >= MAX_BENCH \
                     and not self._would_merge(p, card['id'], 1):
-                return False, '\u5907\u6218\u5e2d\u5df2\u6ee1'
+                return False, '备战席已满'
             p['gold'] -= card['cost']
             p['energy'] -= card['energy']
             p['reason'] -= card['reason']
@@ -847,7 +847,7 @@ class Room:
             self._try_merge(p)
             if p['reason'] <= 0 and not p.get('crashed'):
                 p['crashed'] = True
-                self._sys_chat(f'{p["name"]} \u7406\u667a\u8017\u5c3d\uff0c\u9677\u5165\u5d29\u6e83\uff1a\u6bcf\u56de\u5408\u989d\u5916 -{REASON_CRASH_MIND} \u5fc3\u6001')
+                self._sys_chat(f'{p["name"]} 理智耗尽，陷入崩溃：每回合额外 -{REASON_CRASH_MIND} 心态')
             self.version += 1
             return True, None
 
@@ -859,12 +859,12 @@ class Room:
             if source == 'bench':
                 idx = key_or_idx
                 if not isinstance(idx, int) or not (0 <= idx < len(p['bench'])):
-                    return False, '\u65e0\u6548\u4f4d\u7f6e'
+                    return False, '无效位置'
                 item = p['bench'].pop(idx)
             else:
                 key = key_or_idx
                 if key not in p['board']:
-                    return False, '\u65e0\u6548\u4f4d\u7f6e'
+                    return False, '无效位置'
                 item = p['board'].pop(key)
             card = CARD_BY_ID[item['card']]
             star = unit_star(item)
@@ -883,15 +883,15 @@ class Room:
             if err:
                 return False, err
             if not isinstance(bench_index, int) or not (0 <= bench_index < len(p['bench'])):
-                return False, '\u65e0\u6548\u4f4d\u7f6e'
+                return False, '无效位置'
             if not isinstance(x, int) or not isinstance(y, int) \
                     or not (0 <= x < HALF_W and 0 <= y < HALF_H):
-                return False, '\u8d85\u51fa\u4f60\u7684\u534a\u573a'
+                return False, '超出你的半场'
             if len(p['board']) >= MAX_BOARD:
-                return False, f'\u573a\u4e0a\u6700\u591a {MAX_BOARD} \u4e2a\u68cb\u5b50'
+                return False, f'场上最多 {MAX_BOARD} 个棋子'
             key = f'{x},{y}'
             if key in p['board']:
-                return False, '\u8be5\u4f4d\u7f6e\u5df2\u6709\u5355\u4f4d'
+                return False, '该位置已有单位'
             p['board'][key] = p['bench'].pop(bench_index)
             self.version += 1
             return True, None
@@ -903,9 +903,9 @@ class Room:
                 return False, err
             key = f'{x},{y}'
             if key not in p['board']:
-                return False, '\u7a7a\u4f4d'
+                return False, '空位'
             if len(p['bench']) >= MAX_BENCH:
-                return False, '\u5907\u6218\u5e2d\u5df2\u6ee1'
+                return False, '备战席已满'
             p['bench'].append(p['board'].pop(key))
             self.version += 1
             return True, None
@@ -924,7 +924,7 @@ class Room:
             self.version += 1
             return True, None
 
-    # ---- \u914d\u5bf9 --------------------------------------------------------------
+    # ---- 配对 --------------------------------------------------------------
     def _compute_pairings(self):
         ids = [cid for cid, p in self.players.items() if not p.get('dead')]
         n = len(ids)
@@ -960,12 +960,12 @@ class Room:
         self.pairings = pairs
         self.last_pair_ids = [(p['a'], p['b']) for p in pairs]
         for pr in pairs:
-            print(f'[\u914d\u5bf9] {self.players[pr["a"]]["name"]} vs {self.players[pr["b"]]["name"]}')
+            print(f'[配对] {self.players[pr["a"]]["name"]} vs {self.players[pr["b"]]["name"]}')
         for cid in self._bye_players:
-            print(f'[\u914d\u5bf9] {self.players[cid]["name"]} \u8f6e\u7a7a')
+            print(f'[配对] {self.players[cid]["name"]} 轮空')
 
-    # ---- \u6dd8\u6c70 / \u7ed3\u7b97 -------------------------------------------------------
-    def _mark_dead(self, cid, note='\u88ab\u6dd8\u6c70'):
+    # ---- 淘汰 / 结算 -------------------------------------------------------
+    def _mark_dead(self, cid, note='被淘汰'):
         p = self.players.get(cid)
         if not p or p.get('dead'):
             return
@@ -973,7 +973,7 @@ class Room:
         if not p.get('rated'):
             p['rated'] = True
             update_rating(cid, RATING_LOSE, 'lose', name=p.get('name'))
-            self._sys_chat(f'{p["name"]} {note}\uff0c-20 Rating')
+            self._sys_chat(f'{p["name"]} {note}，-20 Rating')
         else:
             self._sys_chat(f'{p["name"]} {note}')
 
@@ -984,7 +984,7 @@ class Room:
             self.players[cid]['hp'] = max(0, self.players[cid]['hp'] - 1)
         dead = [cid for cid in pending if self.players[cid]['hp'] <= 0]
         for cid in dead:
-            self._mark_dead(cid, '\u7a7a\u573a\u6302\u673a\u88ab\u6dd8\u6c70')
+            self._mark_dead(cid, '空场挂机被淘汰')
         if pending:
             self.version += 1
 
@@ -1042,7 +1042,7 @@ class Room:
             }
             pair['events'] = events
 
-            # \u9635\u4ea1\u68cb\u5b50\u4e0d\u518d\u4ece\u68cb\u76d8\u4e0a\u5220\u9664\uff0c\u4fdd\u7559 0 \u8840\u5230\u4e0b\u4e00\u8f6e\u3002
+            # 阵亡棋子不再从棋盘上删除，保留 0 血到下一轮。
             for key, info in a['board'].items():
                 info['hp'] = max(0, int(a_hp_map.get(key, 0)))
             for key, info in b['board'].items():
@@ -1116,7 +1116,7 @@ class Room:
                 continue
             if p['reason'] <= 0 and not p.get('crashed'):
                 p['crashed'] = True
-                self._sys_chat(f'{p["name"]} \u7406\u667a\u8017\u5c3d\uff0c\u9677\u5165\u5d29\u6e83')
+                self._sys_chat(f'{p["name"]} 理智耗尽，陷入崩溃')
             if p.get('crashed'):
                 p['mind'] = max(0, p['mind'] - REASON_CRASH_MIND)
 
@@ -1124,7 +1124,7 @@ class Room:
                 if not p.get('dead') and (p['hp'] <= 0 or p['mind'] <= 0)]
         for cid in dead:
             p = self.players[cid]
-            note = '\u5fc3\u6001\u5d29\u6e83\u9000\u8d5b' if p['mind'] <= 0 and p['hp'] > 0 else 'AC \u5f52\u96f6\u88ab\u6dd8\u6c70'
+            note = '心态崩溃退赛' if p['mind'] <= 0 and p['hp'] > 0 else 'AC 归零被淘汰'
             self._mark_dead(cid, note)
 
         if self._check_game_over():
@@ -1166,7 +1166,7 @@ class Room:
                 gain = max(1, int(p['gold'] / 3))
                 update_rating(cid, gain, 'win', name=p.get('name'))
                 p['lastResult'] = 'win'
-                self._sys_chat(f'{p["name"]} \u83b7\u80dc\uff01\u91d1\u5e01 {p["gold"]}\uff0cRating +{gain}')
+                self._sys_chat(f'{p["name"]} 获胜！金币 {p["gold"]}，Rating +{gain}')
             else:
                 update_rating(cid, 0, 'lose', name=p.get('name'))
         self._purge_abandoned()
@@ -1196,10 +1196,10 @@ class Room:
             self.players[cid]['roundWins'],
             self.players[cid]['hp'],
         ))
-        self._finish_game(winner_id, f'\u56de\u5408\u4e0a\u9650\uff0c{self.players[winner_id]["name"]} \u91d1\u5e01\u6700\u591a\u83b7\u80dc\uff01')
+        self._finish_game(winner_id, f'回合上限，{self.players[winner_id]["name"]} 金币最多获胜！')
 
     # ========================================================
-    # \u6218\u6597\u6a21\u62df
+    # 战斗模拟
     # ========================================================
     def _unit_from(self, owner, key, info, side, stats, round_no):
         x, y = map(int, key.split(','))
@@ -1242,7 +1242,7 @@ class Room:
 
     @staticmethod
     def _attack_speed_aura(u, units):
-        # \u516b\u90bb\u57df\uff08\u542b\u659c\u89d2\uff09\uff0c\u4ec5\u6d3b\u7740\u7684\u540c\u961f O2\uff1b\u591a\u4e2a\u6765\u6e90\u53d6\u540c\u4e00\u4e2a\u500d\u7387\u3002
+        # 八邻域（含斜角），仅活着的同队 O2；多个来源取同一个倍率。
         return O2_SPEED_MULT if any(
             o is not u and o['hp'] > 0 and o['owner'] == u['owner']
             and o['skill'] == 'o2_aura'
@@ -1298,7 +1298,7 @@ class Room:
                         if o is not u and o['hp'] > 0
                         and o['owner'] == u['owner'] and self._dist(u, o) == 1)
             u['mstGuard'] = min(MST_GUARD_CAP, links) * MST_GUARD_STEP
-        # \u5408\u5e76\u8fb9\u53ea\u7531\u5f52\u5e76\u6392\u5e8f\u8fde\u63a5\u81ea\u5df1\u4e0e\u6b63\u4ea4\u90bb\u5c45\uff1b\u8fde\u901a\u7ec4\u540c\u6b65\u5747\u5206\uff0c\u6d88\u9664\u904d\u5386\u987a\u5e8f\u5dee\u5f02\u3002
+        # 合并边只由归并排序连接自己与正交邻居；连通组同步均分，消除遍历顺序差异。
         unseen = {u['uid']: u for u in units}
         edges = {u['uid']: set() for u in units}
         for u in units:
@@ -1335,7 +1335,7 @@ class Room:
                     pending.remove(u)
 
     def _refresh_swaps(self, units, now):
-        # \u4ece\u57fa\u7840\u653b\u51fb\u6309\u4ecd\u6709\u6548\u7684\u4ea4\u6362\u987a\u5e8f\u91cd\u653e\uff1b\u91cd\u53e0\u4ea4\u6362\u5230\u671f\u4e0d\u4f1a\u56de\u6eda\u6210\u8d1f\u653b\u51fb\u3002
+        # 从基础攻击按仍有效的交换顺序重放；重叠交换到期不会回滚成负攻击。
         tokens = set()
         by_uid = {u['uid']: u for u in units}
         for u in units:
@@ -1373,8 +1373,8 @@ class Room:
 
         if target['skill'] == 'shield_on_low' and source is not None \
                 and dmg < target['atk'] * SHIELD_ON_LOW_ATK:
-            # \u65e7\u89c4\u5219\u662f\u300c\u4f24\u5bb3\u4f4e\u4e8e\u81ea\u8eab\u653b\u51fb\u529b\u5c31\u5b8c\u5168\u514d\u75ab\u300d\uff0c\u5728\u5168\u5c40\u4f24\u5bb3 \xd71/3 \u7684\u8bbe\u5b9a\u4e0b
-            # \u7b49\u4e8e\u5bf9\u540c\u8d39\u53ca\u4ee5\u4e0b\u7684\u653b\u51fb\u8005\u6c38\u4e45\u65e0\u654c\u3002\u73b0\u5728\u6539\u6210\u6309\u6bd4\u4f8b\u51cf\u514d + \u8f6c\u62a4\u76fe\u3002
+            # 旧规则是「伤害低于自身攻击力就完全免疫」，在全局伤害 \xd71/3 的设定下
+            # 等于对同费及以下的攻击者永久无敌。现在改成按比例减免 + 转护盾。
             conv = int(dmg * SHIELD_ON_LOW_CONVERT)
             if conv > 0:
                 pending_shield = conv
@@ -1616,99 +1616,256 @@ class Room:
                 ev.update(extra)
             events.append(ev)
 
-        if sk == 'aoe':
-            for e in enemies:
-                hit(e, 0.5)
-        elif sk == 'aoe_debuff':
-            for e in enemies:
-                hit(e, AOE_DEBUFF_RATIO)
-                e['slowUntil'] = max(e['slowUntil'], t + SLOW_DURATION)
-        elif sk == 'multi':
-            for _ in range(3):
-                if target['hp'] <= 0:
-                    break
-                hit(target, 0.5)
-        elif sk == 'line':
-            row = [e for e in enemies if e['y'] == target['y']]
-            col = [e for e in enemies if e['x'] == target['x']]
-            line = row if len(row) >= len(col) else col
-            for e in (line or [target]):
-                hit(e, 0.5)
-        elif sk == 'range_aoe':
-            box = [e for e in enemies if e['y'] == target['y']
-                   and abs(e['x'] - target['x']) <= 1]
-            for e in box:
-                hit(e, 0.8)
-        elif sk == 'block_aoe':
-            box = [e for e in enemies
-                   if e['x'] // 2 == target['x'] // 2 and e['y'] // 2 == target['y'] // 2]
-            for e in (box or [target]):
-                hit(e, 0.7)
-        elif sk == 'delayed_line':
-            row = [e for e in enemies if e['y'] == target['y']] or [target]
-            for e in row:
-                amount = u['atk'] * DMG_MULT * u['outMult'] * 1.5
-                e['delayed'].append((t + 2.0, amount, u['uid']))
-                cast_event['targets'].append({'x': int(e['x']), 'y': int(e['y'])})
-        elif sk == 'swap_stats':
-            # \u5361\u9762\u5199\u7684\u662f\u201c\u653b\u51fb\u6700\u9ad8\u7684\u654c\u4eba\u201d\uff0c\u76ee\u6807\u672c\u8eab\u4e5f\u5728\u5019\u9009\u91cc
-            other = max(enemies, key=lambda e: e['atk'])
-            ua, oa = u['atk'], other['atk']
-            u['atk'], other['atk'] = oa, ua
-            token = (t, len(events), u['uid'], other['uid'], t + SWAP_DURATION)
-            u['swap'].append(token)
-            other['swap'].append(token)
-            self._refresh_swaps(units, t)
-            cast_event['targets'].append({'x': int(other['x']), 'y': int(other['y'])})
-        elif sk == 'sort_line':
-            row = sorted([e for e in enemies if e['y'] == target['y']], key=lambda e: e['x'])
-            for i in range(0, len(row) - 1, 2):
-                row[i]['x'], row[i + 1]['x'] = row[i + 1]['x'], row[i]['x']
-            for e in row:
-                hit(e, 0.3)
-        elif sk == 'compress_line':
-            allies = [o for o in units
-                      if o is not u and o['hp'] > 0 and o['owner'] == u['owner']
-                      and o['y'] == u['y']]
-            total_atk = u['atk'] + sum(o['atk'] for o in allies)
-            row = [e for e in enemies if e['y'] == target['y']] or [target]
-            for e in row:
-                hit(e, 1.0, raw_override=total_atk * DMG_MULT * u['outMult'])
-        elif sk == 'pincer':
-            near = min(enemies, key=lambda e: self._dist(u, e))
-            far = max(enemies, key=lambda e: self._dist(u, e))
-            hit(near, 1.2)
-            if far is not near:
-                hit(far, 1.2)
-        elif sk == 'partition':
-            ranked = sorted(enemies, key=lambda e: -e['atk'])
-            half = ranked[:max(1, (len(ranked) + 1) // 2)]
-            for e in half:
-                hit(e, 1.0)
-        elif sk == 'divide_conquer':
-            pool = [e for e in enemies if self._dist(u, e) <= u['range']] or [target]
+        caster = self._SKILL_CASTERS.get(sk)
+        if caster is not None:
+            getattr(self, caster)(hit, u, target, enemies, units, events, t, by_uid, cast_event)
+
+    # 技能分派表：sk -> 处理器方法名。每个处理器接收统一上下文，
+    # 逻辑与原 _use_skill 的 if/elif 分支逐行等价；hit 闭包由 _use_skill 传入。
+    _SKILL_CASTERS = {
+        'aoe': '_sk_aoe',
+        'aoe_debuff': '_sk_aoe_debuff',
+        'multi': '_sk_multi',
+        'line': '_sk_line',
+        'range_aoe': '_sk_range_aoe',
+        'block_aoe': '_sk_block_aoe',
+        'delayed_line': '_sk_delayed_line',
+        'swap_stats': '_sk_swap_stats',
+        'sort_line': '_sk_sort_line',
+        'compress_line': '_sk_compress_line',
+        'pincer': '_sk_pincer',
+        'partition': '_sk_partition',
+        'divide_conquer': '_sk_divide_conquer',
+        'sweep': '_sk_sweep',
+        'freeze': '_sk_freeze',
+        'min_cut': '_sk_min_cut',
+    }
+
+    def _sk_aoe(self, hit, u, target, enemies, units, events, t, by_uid, cast_event):
+        for e in enemies:
+            hit(e, 0.5)
+
+    def _sk_aoe_debuff(self, hit, u, target, enemies, units, events, t, by_uid, cast_event):
+        for e in enemies:
+            hit(e, AOE_DEBUFF_RATIO)
+            e['slowUntil'] = max(e['slowUntil'], t + SLOW_DURATION)
+
+    def _sk_multi(self, hit, u, target, enemies, units, events, t, by_uid, cast_event):
+        for _ in range(3):
+            if target['hp'] <= 0:
+                break
+            hit(target, 0.5)
+
+    def _sk_line(self, hit, u, target, enemies, units, events, t, by_uid, cast_event):
+        row = [e for e in enemies if e['y'] == target['y']]
+        col = [e for e in enemies if e['x'] == target['x']]
+        line = row if len(row) >= len(col) else col
+        for e in (line or [target]):
+            hit(e, 0.5)
+
+    def _sk_range_aoe(self, hit, u, target, enemies, units, events, t, by_uid, cast_event):
+        box = [e for e in enemies if e['y'] == target['y']
+               and abs(e['x'] - target['x']) <= 1]
+        for e in box:
+            hit(e, 0.8)
+
+    def _sk_block_aoe(self, hit, u, target, enemies, units, events, t, by_uid, cast_event):
+        box = [e for e in enemies
+               if e['x'] // 2 == target['x'] // 2 and e['y'] // 2 == target['y'] // 2]
+        for e in (box or [target]):
+            hit(e, 0.7)
+
+    def _sk_delayed_line(self, hit, u, target, enemies, units, events, t, by_uid, cast_event):
+        row = [e for e in enemies if e['y'] == target['y']] or [target]
+        for e in row:
+            amount = u['atk'] * DMG_MULT * u['outMult'] * 1.5
+            e['delayed'].append((t + 2.0, amount, u['uid']))
+            cast_event['targets'].append({'x': int(e['x']), 'y': int(e['y'])})
+
+    def _sk_swap_stats(self, hit, u, target, enemies, units, events, t, by_uid, cast_event):
+        # 卡面写的是“攻击最高的敌人”，目标本身也在候选里
+        other = max(enemies, key=lambda e: e['atk'])
+        ua, oa = u['atk'], other['atk']
+        u['atk'], other['atk'] = oa, ua
+        token = (t, len(events), u['uid'], other['uid'], t + SWAP_DURATION)
+        u['swap'].append(token)
+        other['swap'].append(token)
+        self._refresh_swaps(units, t)
+        cast_event['targets'].append({'x': int(other['x']), 'y': int(other['y'])})
+
+    def _sk_sort_line(self, hit, u, target, enemies, units, events, t, by_uid, cast_event):
+        row = sorted([e for e in enemies if e['y'] == target['y']], key=lambda e: e['x'])
+        for i in range(0, len(row) - 1, 2):
+            row[i]['x'], row[i + 1]['x'] = row[i + 1]['x'], row[i]['x']
+        for e in row:
+            hit(e, 0.3)
+
+    def _sk_compress_line(self, hit, u, target, enemies, units, events, t, by_uid, cast_event):
+        allies = [o for o in units
+                  if o is not u and o['hp'] > 0 and o['owner'] == u['owner']
+                  and o['y'] == u['y']]
+        total_atk = u['atk'] + sum(o['atk'] for o in allies)
+        row = [e for e in enemies if e['y'] == target['y']] or [target]
+        for e in row:
+            hit(e, 1.0, raw_override=total_atk * DMG_MULT * u['outMult'])
+
+    def _sk_pincer(self, hit, u, target, enemies, units, events, t, by_uid, cast_event):
+        near = min(enemies, key=lambda e: self._dist(u, e))
+        far = max(enemies, key=lambda e: self._dist(u, e))
+        hit(near, 1.2)
+        if far is not near:
+            hit(far, 1.2)
+
+    def _sk_partition(self, hit, u, target, enemies, units, events, t, by_uid, cast_event):
+        ranked = sorted(enemies, key=lambda e: -e['atk'])
+        half = ranked[:max(1, (len(ranked) + 1) // 2)]
+        for e in half:
+            hit(e, 1.0)
+
+    def _sk_divide_conquer(self, hit, u, target, enemies, units, events, t, by_uid, cast_event):
+        pool = [e for e in enemies if self._dist(u, e) <= u['range']] or [target]
+        for e in pool:
+            hit(e, 0.5)
+        if all(e['hp'] > 0 for e in pool):
             for e in pool:
-                hit(e, 0.5)
-            if all(e['hp'] > 0 for e in pool):
-                for e in pool:
-                    hit(e, 1.0)
-        elif sk == 'sweep':
-            row = sorted([e for e in enemies if e['y'] == target['y']] or [target],
-                         key=lambda e: abs(e['x'] - u['x']))
-            for i, e in enumerate(row[:3]):
-                hit(e, 0.6 + 0.3 * i)
-        elif sk == 'freeze':
-            for e in enemies:
-                hit(e, FREEZE_RATIO)
-                e['stallUntil'] = max(e['stallUntil'], t + FREEZE_STALL)
-        elif sk == 'min_cut':
-            n = max(1, len(enemies))
-            ratio = MIN_CUT_RATIO / (1.0 + MIN_CUT_SPREAD * (n - 1))
-            boss = max(enemies, key=lambda e: e['hp']) if enemies else None
-            for e in enemies:
-                hit(e, ratio)
-            if boss is not None and boss['hp'] > 0:
-                hit(boss, MIN_CUT_BOSS_RATIO / (1.0 + MIN_CUT_BOSS_SPREAD * (n - 1)))
+                hit(e, 1.0)
+
+    def _sk_sweep(self, hit, u, target, enemies, units, events, t, by_uid, cast_event):
+        row = sorted([e for e in enemies if e['y'] == target['y']] or [target],
+                     key=lambda e: abs(e['x'] - u['x']))
+        for i, e in enumerate(row[:3]):
+            hit(e, 0.6 + 0.3 * i)
+
+    def _sk_freeze(self, hit, u, target, enemies, units, events, t, by_uid, cast_event):
+        for e in enemies:
+            hit(e, FREEZE_RATIO)
+            e['stallUntil'] = max(e['stallUntil'], t + FREEZE_STALL)
+
+    def _sk_min_cut(self, hit, u, target, enemies, units, events, t, by_uid, cast_event):
+        n = max(1, len(enemies))
+        ratio = MIN_CUT_RATIO / (1.0 + MIN_CUT_SPREAD * (n - 1))
+        boss = max(enemies, key=lambda e: e['hp']) if enemies else None
+        for e in enemies:
+            hit(e, ratio)
+        if boss is not None and boss['hp'] > 0:
+            hit(boss, MIN_CUT_BOSS_RATIO / (1.0 + MIN_CUT_BOSS_SPREAD * (n - 1)))
+
+    def _alive_side(self, units, owner):
+        return [u for u in units if u['hp'] > 0 and u['owner'] == owner]
+
+    def _frame_snapshot(self, units, now, record, frames):
+        if not record:
+            return
+        frames.append({
+            't': round(now, 6),
+            'units': [{
+                'uid': u['uid'], 'owner': u['owner'],
+                'x': int(u['x']), 'y': int(u['y']),
+                'hp': max(0, int(u['hp'])), 'maxHp': int(u['maxHp']),
+                'shield': max(0, int(u['shield'])),
+                'card': u['card'], 'star': u['star'], 'slowed': u['slowUntil'] > now,
+                'haste': self._attack_speed_aura(u, units),
+                'stalled': u['stallUntil'] > now,
+                'stallLeft': round(max(0.0, u['stallUntil'] - now), 3),
+                'atk': round(u['atk'], 2), 'range': u['range'],
+                'attackProgress': max(0.0, min(1.0, 1.0 - u['atkCd'] / (ATK_CD / (SPFA_SPEED_MULT if u['skill'] == 'spfa_stall' else 1.0)))),
+                'skillLeft': round(max(0.0, u['skillCd']), 3),
+                'delayedDamage': round(sum(d[1] for d in u['delayed']), 2),
+                'charge': u['charge'], 'stacks': u['stacks'], 'kills': u['kills'],
+                'swapped': bool(u['swap']),
+                'phase': '爆发' if u['skill'] == 'cdq' and now >= CDQ_SWITCH else '',
+            } for u in units if u['hp'] > 0],
+        })
+
+    def _settle_delayed(self, u, units, events, t, by_uid, eps):
+        if not u['delayed']:
+            return
+        due = [d for d in u['delayed'] if d[0] <= t + eps]
+        u['delayed'] = [d for d in u['delayed'] if d[0] > t + eps]
+        for _, amount, src_uid in due:
+            src = by_uid.get(src_uid)
+            dealt = self._deal_damage(u, amount, events, t, units, by_uid, source=src)
+            events.append({'t': round(t, 6), 'type': 'attack', 'fromX': src['x'] if src else u['x'], 'fromY': src['y'] if src else u['y'], 'toX': u['x'], 'toY': u['y'], 'dmg': dealt, 'owner': src['owner'] if src else u['owner'], 'sourceUid': src_uid, 'targetUid': u['uid'], 'skill': True, 'skillId': 'delayed_line'})
+
+    def _act_in_range(self, u, target, enemies, units, events, t, by_uid, round_no, pools, eps):
+        acted = False
+        if t >= u['actionUntil'] - eps:
+            if u['active'] and u['skillCd'] <= eps:
+                cost = float(CARD_BY_ID[u['card']]['skillCost'])
+                if pools.get(u['owner'], 0.0) >= cost:
+                    pools[u['owner']] -= cost
+                    u['skillCd'] = SKILL_CD
+                    self._use_skill(u, target, enemies, units, events, t, by_uid, round_no)
+                    # 保留原有施法占用一次行动的规则。
+                    u['actionUntil'] = t + TICK_SEC
+                    acted = True
+            if not acted and u['atkCd'] <= eps and t >= u['stallUntil'] - eps:
+                self._do_attack(u, target, units, events, t, by_uid, round_no)
+                u['atkCd'] = ATK_CD / (SPFA_SPEED_MULT if u['skill'] == 'spfa_stall' else 1.0)
+                if u['skill'] == 'spfa_stall' and random.random() < SPFA_STALL_CHANCE:
+                    u['stallUntil'] = t + SPFA_STALL_EXTRA
+
+    def _step_move(self, u, target, units):
+        dx = target['x'] - u['x']
+        dy = target['y'] - u['y']
+        sx = 0 if dx == 0 else (1 if dx > 0 else -1)
+        sy = 0 if dy == 0 else (1 if dy > 0 else -1)
+        order = ([(sx, 0), (0, sy)] if abs(dx) >= abs(dy)
+                 else [(0, sy), (sx, 0)])
+        occupied = {(o['x'], o['y']) for o in units if o is not u and o['hp'] > 0}
+        for mx, my in order:
+            if mx == 0 and my == 0:
+                continue
+            nx, ny = u['x'] + mx, u['y'] + my
+            if not (0 <= nx < BATTLE_W):
+                continue
+            lo, hi = ((HALF_H, BATTLE_H - 1) if u['side'] == 'a'
+                      else (0, HALF_H - 1))
+            if not (lo <= ny <= hi):
+                continue
+            # 单位不能进入已被其他存活单位占据的格子，避免战斗帧出现棋子重叠。
+            if (nx, ny) in occupied:
+                continue
+            u['x'], u['y'] = nx, ny
+            break
+
+    def _next_event_time(self, units, t, next_move, pools, eps):
+        next_t = min(BATTLE_TIME, next_move)
+        for u in units:
+            for due, _, _ in u['delayed']:
+                if due > t + eps:
+                    next_t = min(next_t, due)
+            if u['hp'] <= 0:
+                continue
+            for expiry in (u['slowUntil'], u['stallUntil'], u['actionUntil']):
+                if expiry > t + eps:
+                    next_t = min(next_t, expiry)
+            for _, _, _, _, expiry in u['swap']:
+                if expiry > t + eps:
+                    next_t = min(next_t, expiry)
+            if u['skill'] == 'o2_aura':
+                continue
+            enemies = [e for e in units if e['owner'] != u['owner'] and e['hp'] > 0]
+            if not enemies or self._dist(u, self._pick_target(u, enemies)) > u['range']:
+                continue
+            ready = max(t, u['stallUntil']) + max(0.0, u['atkCd']) / self._attack_rate(u, units, t)
+            ready = max(ready, u['actionUntil'])
+            if ready > t + eps:
+                next_t = min(next_t, ready)
+            if u['active'] and pools.get(u['owner'], 0.0) >= float(CARD_BY_ID[u['card']]['skillCost']):
+                ready = max(t + max(0.0, u['skillCd']), u['actionUntil'])
+                if ready > t + eps:
+                    next_t = min(next_t, ready)
+        return next_t
+
+    def _integrate_cooldowns(self, units, t, next_t):
+        dt = next_t - t
+        for u in units:
+            if u['hp'] <= 0:
+                continue
+            work_dt = max(0.0, next_t - max(t, u['stallUntil']))
+            u['atkCd'] = max(0.0, u['atkCd'] - work_dt * self._attack_rate(u, units, t))
+            u['skillCd'] = max(0.0, u['skillCd'] - dt)
 
     def _simulate_battle(self, a, b, round_no, record=True):
         stats = {}
@@ -1739,51 +1896,19 @@ class Room:
         events = []
         t = 0.0
 
-        def alive(owner):
-            return [u for u in units if u['hp'] > 0 and u['owner'] == owner]
 
-        def snap(now):
-            if not record:
-                return
-            frames.append({
-                't': round(now, 6),
-                'units': [{
-                    'uid': u['uid'], 'owner': u['owner'],
-                    'x': int(u['x']), 'y': int(u['y']),
-                    'hp': max(0, int(u['hp'])), 'maxHp': int(u['maxHp']),
-                    'shield': max(0, int(u['shield'])),
-                    'card': u['card'], 'star': u['star'], 'slowed': u['slowUntil'] > now,
-                    'haste': self._attack_speed_aura(u, units),
-                    'stalled': u['stallUntil'] > now,
-                    'stallLeft': round(max(0.0, u['stallUntil'] - now), 3),
-                    'atk': round(u['atk'], 2), 'range': u['range'],
-                    'attackProgress': max(0.0, min(1.0, 1.0 - u['atkCd'] / (ATK_CD / (SPFA_SPEED_MULT if u['skill'] == 'spfa_stall' else 1.0)))),
-                    'skillLeft': round(max(0.0, u['skillCd']), 3),
-                    'delayedDamage': round(sum(d[1] for d in u['delayed']), 2),
-                    'charge': u['charge'], 'stacks': u['stacks'], 'kills': u['kills'],
-                    'swapped': bool(u['swap']),
-                    'phase': '\u7206\u53d1' if u['skill'] == 'cdq' and now >= CDQ_SWITCH else '',
-                } for u in units if u['hp'] > 0],
-            })
-
-        # \u653b\u51fb/\u6280\u80fd/\u72b6\u6001\u5230\u671f\u4f7f\u7528\u4e8b\u4ef6\u65f6\u95f4\uff1b\u79fb\u52a8\u4ecd\u6bcf TICK_SEC \u4e00\u6b21\u3002
-        # \u4e0d\u7f29\u5c0f\u5168\u5c40 tick\uff0c\u4e5f\u4e0d\u628a\u51b7\u5374\u4f59\u91cf\u5411\u4e0a\u53d6\u6574\u3002
+        # 攻击/技能/状态到期使用事件时间；移动仍每 TICK_SEC 一次。
+        # 不缩小全局 tick，也不把冷却余量向上取整。
         eps = 1e-9
         next_move = 0.0
-        snap(0.0)
+        self._frame_snapshot(units, 0.0, record, frames)
         while t < BATTLE_TIME - eps:
             move_now = t >= next_move - eps
             if move_now:
                 next_move += TICK_SEC
             self._refresh_swaps(units, t)
             for u in units:
-                if u['delayed']:
-                    due = [d for d in u['delayed'] if d[0] <= t + eps]
-                    u['delayed'] = [d for d in u['delayed'] if d[0] > t + eps]
-                    for _, amount, src_uid in due:
-                        src = by_uid.get(src_uid)
-                        dealt = self._deal_damage(u, amount, events, t, units, by_uid, source=src)
-                        events.append({'t': round(t, 6), 'type': 'attack', 'fromX': src['x'] if src else u['x'], 'fromY': src['y'] if src else u['y'], 'toX': u['x'], 'toY': u['y'], 'dmg': dealt, 'owner': src['owner'] if src else u['owner'], 'sourceUid': src_uid, 'targetUid': u['uid'], 'skill': True, 'skillId': 'delayed_line'})
+                self._settle_delayed(u, units, events, t, by_uid, eps)
                 if u['hp'] <= 0:
                     continue
                 enemies = [e for e in units if e['owner'] != u['owner'] and e['hp'] > 0]
@@ -1793,92 +1918,25 @@ class Room:
                     continue
                 target = self._pick_target(u, enemies)
                 if self._dist(u, target) <= u['range']:
-                    acted = False
-                    if t >= u['actionUntil'] - eps:
-                        if u['active'] and u['skillCd'] <= eps:
-                            cost = float(CARD_BY_ID[u['card']]['skillCost'])
-                            if pools.get(u['owner'], 0.0) >= cost:
-                                pools[u['owner']] -= cost
-                                u['skillCd'] = SKILL_CD
-                                self._use_skill(u, target, enemies, units, events, t, by_uid, round_no)
-                                # \u4fdd\u7559\u539f\u6709\u65bd\u6cd5\u5360\u7528\u4e00\u6b21\u884c\u52a8\u7684\u89c4\u5219\u3002
-                                u['actionUntil'] = t + TICK_SEC
-                                acted = True
-                        if not acted and u['atkCd'] <= eps and t >= u['stallUntil'] - eps:
-                            self._do_attack(u, target, units, events, t, by_uid, round_no)
-                            u['atkCd'] = ATK_CD / (SPFA_SPEED_MULT if u['skill'] == 'spfa_stall' else 1.0)
-                            if u['skill'] == 'spfa_stall' and random.random() < SPFA_STALL_CHANCE:
-                                u['stallUntil'] = t + SPFA_STALL_EXTRA
+                    self._act_in_range(u, target, enemies, units, events, t, by_uid, round_no, pools, eps)
                 elif move_now:
-                    dx = target['x'] - u['x']
-                    dy = target['y'] - u['y']
-                    sx = 0 if dx == 0 else (1 if dx > 0 else -1)
-                    sy = 0 if dy == 0 else (1 if dy > 0 else -1)
-                    order = ([(sx, 0), (0, sy)] if abs(dx) >= abs(dy)
-                             else [(0, sy), (sx, 0)])
-                    occupied = {(o['x'], o['y']) for o in units if o is not u and o['hp'] > 0}
-                    for mx, my in order:
-                        if mx == 0 and my == 0:
-                            continue
-                        nx, ny = u['x'] + mx, u['y'] + my
-                        if not (0 <= nx < BATTLE_W):
-                            continue
-                        lo, hi = ((HALF_H, BATTLE_H - 1) if u['side'] == 'a'
-                                  else (0, HALF_H - 1))
-                        if not (lo <= ny <= hi):
-                            continue
-                        # \u5355\u4f4d\u4e0d\u80fd\u8fdb\u5165\u5df2\u88ab\u5176\u4ed6\u5b58\u6d3b\u5355\u4f4d\u5360\u636e\u7684\u683c\u5b50\uff0c\u907f\u514d\u6218\u6597\u5e27\u51fa\u73b0\u68cb\u5b50\u91cd\u53e0\u3002
-                        if (nx, ny) in occupied:
-                            continue
-                        u['x'], u['y'] = nx, ny
-                        break
+                    self._step_move(u, target, units)
 
 
-            # \u5b58\u50a8\u771f\u5b9e\u4e8b\u4ef6\u65f6\u523b\u7684\u72b6\u6001\uff1b\u91cd\u590d\u65f6\u95f4\u6233\u66ff\u6362\u521d\u59cb\u5feb\u7167\u3002
+            # 存储真实事件时刻的状态；重复时间戳替换初始快照。
             if frames and abs(frames[-1]['t'] - t) < eps:
                 frames.pop()
-            snap(t)
-            if not alive(a['id']) or not alive(b['id']):
+            self._frame_snapshot(units, t, record, frames)
+            if not self._alive_side(units, a['id']) or not self._alive_side(units, b['id']):
                 break
 
-            next_t = min(BATTLE_TIME, next_move)
-            for u in units:
-                for due, _, _ in u['delayed']:
-                    if due > t + eps:
-                        next_t = min(next_t, due)
-                if u['hp'] <= 0:
-                    continue
-                for expiry in (u['slowUntil'], u['stallUntil'], u['actionUntil']):
-                    if expiry > t + eps:
-                        next_t = min(next_t, expiry)
-                for _, _, _, _, expiry in u['swap']:
-                    if expiry > t + eps:
-                        next_t = min(next_t, expiry)
-                if u['skill'] == 'o2_aura':
-                    continue
-                enemies = [e for e in units if e['owner'] != u['owner'] and e['hp'] > 0]
-                if not enemies or self._dist(u, self._pick_target(u, enemies)) > u['range']:
-                    continue
-                ready = max(t, u['stallUntil']) + max(0.0, u['atkCd']) / self._attack_rate(u, units, t)
-                ready = max(ready, u['actionUntil'])
-                if ready > t + eps:
-                    next_t = min(next_t, ready)
-                if u['active'] and pools.get(u['owner'], 0.0) >= float(CARD_BY_ID[u['card']]['skillCost']):
-                    ready = max(t + max(0.0, u['skillCd']), u['actionUntil'])
-                    if ready > t + eps:
-                        next_t = min(next_t, ready)
+            next_t = self._next_event_time(units, t, next_move, pools, eps)
 
-            # \u533a\u95f4\u5185\u5149\u73af\u3001\u51cf\u901f\u548c\u5361\u987f\u72b6\u6001\u4e0d\u53d8\uff1b\u79ef\u5206\u51c6\u5907\u8fdb\u5ea6\u3002
-            dt = next_t - t
-            for u in units:
-                if u['hp'] <= 0:
-                    continue
-                work_dt = max(0.0, next_t - max(t, u['stallUntil']))
-                u['atkCd'] = max(0.0, u['atkCd'] - work_dt * self._attack_rate(u, units, t))
-                u['skillCd'] = max(0.0, u['skillCd'] - dt)
+            # 区间内光环、减速和卡顿状态不变；积分准备进度。
+            self._integrate_cooldowns(units, t, next_t)
             t = next_t
         if frames and frames[-1]['t'] < round(t, 6):
-            snap(t)
+            self._frame_snapshot(units, t, record, frames)
 
         a_hp, b_hp = {}, {}
         for u in units:
@@ -1893,7 +1951,7 @@ class Room:
         events.sort(key=lambda event: event['t'])
         return frames, events, a_hp, b_hp
 
-    # ---- \u89c6\u89d2\u53d8\u6362 ----------------------------------------------------------
+    # ---- 视角变换 ----------------------------------------------------------
     def _mirror_y(self, y):
         return BATTLE_H - 1 - y
 
@@ -1943,7 +2001,7 @@ class Room:
                           'slowed': False})
         return [{'t': 0.0, 'units': units}]
 
-    # ---- \u5bf9\u5916\u72b6\u6001 ----------------------------------------------------------
+    # ---- 对外状态 ----------------------------------------------------------
     def _battle_key(self):
         return f'{self.round}:{self.battle_started_at:.3f}'
 
@@ -2086,7 +2144,7 @@ def leave_room(cid, rid, penalize=True):
         if p and penalize and in_game and was_alive:
             update_rating(cid, RATING_QUIT, 'lose', name=p.get('name'))
             p['rated'] = True
-            r._sys_chat(f'{p["name"]} \u4e2d\u9014\u9000\u51fa\uff0c-30 Rating')
+            r._sys_chat(f'{p["name"]} 中途退出，-30 Rating')
 
         if p:
             name = p['name']
@@ -2094,11 +2152,11 @@ def leave_room(cid, rid, penalize=True):
                 p['dead'] = True
                 p['abandoned'] = True
                 p['ready'] = False
-                r._sys_chat(f'{name} \u79bb\u5f00\u4e86\u5bf9\u5c40')
+                r._sys_chat(f'{name} 离开了对局')
             else:
                 del r.players[cid]
                 r.colors.pop(cid, None)
-                r._sys_chat(f'{name} \u79bb\u5f00\u4e86\u623f\u95f4')
+                r._sys_chat(f'{name} 离开了房间')
 
         if not in_game:
             for aid in [c for c, pl in r.players.items() if pl.get('abandoned')]:
@@ -2109,7 +2167,7 @@ def leave_room(cid, rid, penalize=True):
             cand = [c for c, pl in r.players.items() if not pl.get('abandoned')]
             if cand:
                 r.host = cand[0]
-                r._sys_chat(f'{r.players[r.host]["name"]} \u6210\u4e3a\u65b0\u623f\u4e3b')
+                r._sys_chat(f'{r.players[r.host]["name"]} 成为新房主')
 
         r.version += 1
         if in_game:
@@ -2122,11 +2180,11 @@ def leave_room(cid, rid, penalize=True):
 
 
 # ============================================================
-# \u6389\u7ebf\u6e05\u7406 & \u623f\u95f4\u56de\u6536
+# 掉线清理 & 房间回收
 # ============================================================
 def _cleanup_room_locked(r, now, to_remove):
-    """\u5728\u6301\u6709 r.lock \u7684\u524d\u63d0\u4e0b\uff1a\u8e22\u6389\u7ebf\u73a9\u5bb6\u3001\u91cd\u9009\u623f\u4e3b\u3001\u56de\u6536\u7a7a\u623f\u3002"""
-    # 1. \u5fc3\u8df3\u8d85\u65f6
+    """在持有 r.lock 的前提下：踢掉线玩家、重选房主、回收空房。"""
+    # 1. 心跳超时
     for cid, p in list(r.players.items()):
         if p.get('abandoned'):
             continue
@@ -2142,32 +2200,32 @@ def _cleanup_room_locked(r, now, to_remove):
             p['dead'] = True
             p['abandoned'] = True
             p['ready'] = False
-            r._sys_chat(f'{name} \u957f\u65f6\u95f4\u65e0\u54cd\u5e94\uff0c\u5df2\u6389\u7ebf')
+            r._sys_chat(f'{name} 长时间无响应，已掉线')
         else:
             r.players.pop(cid, None)
             r.colors.pop(cid, None)
-            r._sys_chat(f'{name} \u957f\u65f6\u95f4\u65e0\u54cd\u5e94\uff0c\u5df2\u79bb\u5f00')
+            r._sys_chat(f'{name} 长时间无响应，已离开')
         r.version += 1
 
-    # 2. \u623f\u4e3b\u79bb\u7ebf / \u4e0d\u5728\u623f\u95f4 \u2192 \u91cd\u9009
+    # 2. 房主离线 / 不在房间 → 重选
     if r.host not in r.players or r.players[r.host].get('abandoned'):
         cand = [c for c, pl in r.players.items() if not pl.get('abandoned')]
         if cand:
             r.host = cand[0]
-            r._sys_chat(f'{r.players[r.host]["name"]} \u6210\u4e3a\u65b0\u623f\u4e3b')
+            r._sys_chat(f'{r.players[r.host]["name"]} 成为新房主')
             r.version += 1
 
-    # 3. \u5bf9\u5c40\u4e2d\u6389\u7ebf\u540e\u91cd\u65b0\u5224\u5b9a\u5bf9\u5c40\u662f\u5426\u7ed3\u675f
+    # 3. 对局中掉线后重新判定对局是否结束
     if r.state in ('prep', 'battle'):
         r._check_game_over()
 
-    # 4. \u623f\u95f4\u56de\u6536\uff1a\u6ca1\u6709\u6d3b\u4eba
+    # 4. 房间回收：没有活人
     alive = [pl for pl in r.players.values() if not pl.get('abandoned')]
     if not alive:
         to_remove.append(r.id)
         return
 
-    # 5. \u5df2\u7ed3\u675f\u623f\u95f4\u8d85\u65f6\u56de\u6536
+    # 5. 已结束房间超时回收
     if r.state == 'ended' and r._ended_at and now - r._ended_at > ROOM_TTL_ENDED:
         to_remove.append(r.id)
 
@@ -2187,10 +2245,10 @@ def cleanup_rooms():
         with ROOMS_LOCK:
             for rid in to_remove:
                 if ROOMS.pop(rid, None):
-                    print(f'[\u623f\u95f4\u56de\u6536] {rid}')
+                    print(f'[房间回收] {rid}')
 
 
-# \u6bcf\u623f\u95f4\u72ec\u7acb tick \u5e76\u53d1\u6267\u884c\uff0c\u907f\u514d\u4e00\u4e2a\u623f\u95f4\u7684\u6218\u6597\u6a21\u62df\u963b\u585e\u5176\u4ed6\u623f\u95f4\u7684\u5012\u8ba1\u65f6
+# 每房间独立 tick 并发执行，避免一个房间的战斗模拟阻塞其他房间的倒计时
 _tick_pool = ThreadPoolExecutor(max_workers=8, thread_name_prefix='tick')
 
 
@@ -2232,11 +2290,11 @@ def tick_loop():
 
 
 class QuietThreadingTCPServer(socketserver.ThreadingTCPServer):
-    """\u5ba2\u6237\u7aef\u63d0\u524d\u65ad\u5f00\uff08\u6d4f\u89c8\u5668 abort \u8f6e\u8be2 / \u5173\u95ed\u6807\u7b7e\u9875\uff09\u4f1a\u4ea7\u751f
-    ConnectionAbortedError / ConnectionResetError / BrokenPipeError\uff0c
-    \u8fd9\u4e9b\u5c5e\u4e8e\u6b63\u5e38\u7f51\u7edc\u566a\u58f0\uff0c\u9759\u9ed8\u5ffd\u7565\uff1b\u5176\u4ed6\u5f02\u5e38\u7167\u5e38\u6253\u5370\u4fbf\u4e8e\u6392\u67e5\u771f\u5b9e bug\u3002"""
+    """客户端提前断开（浏览器 abort 轮询 / 关闭标签页）会产生
+    ConnectionAbortedError / ConnectionResetError / BrokenPipeError，
+    这些属于正常网络噪声，静默忽略；其他异常照常打印便于排查真实 bug。"""
     allow_reuse_address = True
-    daemon_threads = True      # Ctrl+C \u9000\u51fa\u65f6\u4e0d\u518d join \u6240\u6709\u8bf7\u6c42\u7ebf\u7a0b\uff0c\u907f\u514d\u5361\u4f4f
+    daemon_threads = True      # Ctrl+C 退出时不再 join 所有请求线程，避免卡住
 
     def handle_error(self, request, client_address):
         exc = sys.exc_info()[1]
@@ -2312,9 +2370,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._handle_get()
         except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
             pass
-        except Exception as e:                      # \u515c\u5e95\uff1a\u4e0d\u8ba9\u5904\u7406\u7ebf\u7a0b\u9759\u9ed8\u5d29\u6e83
-            print(f'!! GET {self.path} \u5904\u7406\u5f02\u5e38: {e!r}')
-            self._json({'error': '\u670d\u52a1\u5668\u5185\u90e8\u9519\u8bef'}, 500)
+        except Exception as e:                      # 兜底：不让处理线程静默崩溃
+            print(f'!! GET {self.path} 处理异常: {e!r}')
+            self._json({'error': '服务器内部错误'}, 500)
 
     def _handle_get(self):
         p = urlparse(self.path)
@@ -2378,112 +2436,128 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._handle_post()
         except (ConnectionAbortedError, ConnectionResetError, BrokenPipeError):
             pass
-        except Exception as e:                      # \u515c\u5e95\uff1a\u4e0d\u8ba9\u5904\u7406\u7ebf\u7a0b\u9759\u9ed8\u5d29\u6e83
-            print(f'!! POST {self.path} \u5904\u7406\u5f02\u5e38: {e!r}')
-            self._json({'error': '\u670d\u52a1\u5668\u5185\u90e8\u9519\u8bef'}, 500)
+        except Exception as e:                      # 兜底：不让处理线程静默崩溃
+            print(f'!! POST {self.path} 处理异常: {e!r}')
+            self._json({'error': '服务器内部错误'}, 500)
+
+    _POST_ROUTES = {
+        '/api/rooms': '_api_rooms',
+        '/api/join': '_api_join',
+        '/api/rejoin': '_api_rejoin',
+        '/api/chat': '_api_chat',
+        '/api/action': '_api_action',
+    }
 
     def _handle_post(self):
         p = urlparse(self.path)
         path = p.path
         data = self._read_json()
-        if path == '/api/rooms':
-            cid = _as_str(data.get('clientId'), 64)
-            if not cid:
-                return self._json({'error': 'missing clientId'}, 400)
-            name = _as_str(data.get('name'), 12) or '\u9009\u624b'
-            get_profile(cid, name)
-            existing = find_room_by_client(cid)
-            if existing:
-                return self._json({'roomId': existing.id, 'playerId': cid, 'rejoined': True})
-            rid = uuid.uuid4().hex[:6]
-            room = Room(rid, cid)
-            with ROOMS_LOCK:
-                ROOMS[rid] = room
-            ok, err = room.add_player(cid, name)
-            if not ok:
-                with ROOMS_LOCK:
-                    ROOMS.pop(rid, None)
-                return self._json({'error': err}, 400)
-            return self._json({'roomId': rid, 'playerId': cid})
-        if path == '/api/join':
-            cid = _as_str(data.get('clientId'), 64)
-            rid = _as_str(data.get('roomId'), 32)
-            name = _as_str(data.get('name'), 12) or '\u9009\u624b'
-            if not cid or not rid:
-                return self._json({'error': '\u53c2\u6570\u7f3a\u5931'}, 400)
-            get_profile(cid, name)
-            with ROOMS_LOCK:
-                room = ROOMS.get(rid)
-                if not room:
-                    return self._json({'error': '\u623f\u95f4\u4e0d\u5b58\u5728'}, 404)
-            if cid in room.players:
-                room._touch(cid)
-                return self._json({'roomId': rid, 'playerId': cid, 'rejoined': True})
-            old = find_room_by_client(cid)
-            if old and old.id != rid:
-                leave_room(cid, old.id, penalize=True)
-            ok, err = room.add_player(cid, name)
-            if not ok:
-                return self._json({'error': err}, 400)
-            return self._json({'roomId': rid, 'playerId': cid})
-        if path == '/api/rejoin':
-            cid = _as_str(data.get('clientId'), 64)
-            if not cid:
-                return self._json({'error': 'missing clientId'}, 400)
-            room = find_room_by_client(cid)
-            if not room:
-                return self._json({'error': '\u65e0\u53ef\u7528\u623f\u95f4'}, 404)
-            room._touch(cid)
-            return self._json({'roomId': room.id, 'playerId': cid})
-        if path == '/api/chat':
-            pid = _as_str(data.get('playerId'), 64)
-            text = data.get('text', '')
-            if not pid:
-                return self._json({'error': 'missing playerId'}, 400)
-            room = find_room_by_client(pid)
-            if not room:
-                return self._json({'error': '\u4e0d\u5728\u623f\u95f4'}, 404)
-            ok, err = room.send_chat(pid, text)
-            if not ok:
-                return self._json({'error': err}, 400)
-            return self._json({'ok': True})
-        if path == '/api/action':
-            pid = _as_str(data.get('playerId'), 64)
-            action = _as_str(data.get('action'), 32)
-            if not pid:
-                return self._json({'error': 'missing playerId'}, 400)
-            room = find_room_by_client(pid)
-            if not room:
-                return self._json({'error': '\u4e0d\u5728\u623f\u95f4'}, 404)
-            if action == 'start':
-                ok, err = room.start(pid)
-            elif action == 'buy':
-                ok, err = room.buy(pid, _as_int(data.get('index'), -1))
-            elif action == 'sell':
-                src = _as_str(data.get('source'), 16)
-                if src == 'bench':
-                    ok, err = room.sell(pid, src, _as_int(data.get('index'), -1))
-                else:
-                    ok, err = room.sell(pid, src, _as_str(data.get('index'), 16))
-            elif action == 'place':
-                ok, err = room.place(pid, _as_int(data.get('benchIndex'), -1),
-                                     _as_int(data.get('x'), -1), _as_int(data.get('y'), -1))
-            elif action == 'retrieve':
-                ok, err = room.retrieve(pid, _as_int(data.get('x'), -1),
-                                        _as_int(data.get('y'), -1))
-            elif action == 'ready':
-                ok, err = room.toggle_ready(pid)
-            elif action == 'refresh':
-                ok, err = room.refresh_shop(pid)
-            elif action == 'leave':
-                leave_room(pid, room.id, penalize=True)
-                return self._json({'ok': True})
-            else:
-                ok, err = False, f'\u672a\u77e5\u64cd\u4f5c {action}'
-            if not ok:
-                return self._json({'error': err}, 400)
-            return self._json({'ok': True})
+        handler = self._POST_ROUTES.get(path)
+        if handler is not None:
+            return getattr(self, handler)(data)
         return self._json({'error': f'not found: {path}'}, 404)
+
+    def _api_rooms(self, data):
+        cid = _as_str(data.get('clientId'), 64)
+        if not cid:
+            return self._json({'error': 'missing clientId'}, 400)
+        name = _as_str(data.get('name'), 12) or '选手'
+        get_profile(cid, name)
+        existing = find_room_by_client(cid)
+        if existing:
+            return self._json({'roomId': existing.id, 'playerId': cid, 'rejoined': True})
+        rid = uuid.uuid4().hex[:6]
+        room = Room(rid, cid)
+        with ROOMS_LOCK:
+            ROOMS[rid] = room
+        ok, err = room.add_player(cid, name)
+        if not ok:
+            with ROOMS_LOCK:
+                ROOMS.pop(rid, None)
+            return self._json({'error': err}, 400)
+        return self._json({'roomId': rid, 'playerId': cid})
+
+    def _api_join(self, data):
+        cid = _as_str(data.get('clientId'), 64)
+        rid = _as_str(data.get('roomId'), 32)
+        name = _as_str(data.get('name'), 12) or '选手'
+        if not cid or not rid:
+            return self._json({'error': '参数缺失'}, 400)
+        get_profile(cid, name)
+        with ROOMS_LOCK:
+            room = ROOMS.get(rid)
+            if not room:
+                return self._json({'error': '房间不存在'}, 404)
+        if cid in room.players:
+            room._touch(cid)
+            return self._json({'roomId': rid, 'playerId': cid, 'rejoined': True})
+        old = find_room_by_client(cid)
+        if old and old.id != rid:
+            leave_room(cid, old.id, penalize=True)
+        ok, err = room.add_player(cid, name)
+        if not ok:
+            return self._json({'error': err}, 400)
+        return self._json({'roomId': rid, 'playerId': cid})
+
+    def _api_rejoin(self, data):
+        cid = _as_str(data.get('clientId'), 64)
+        if not cid:
+            return self._json({'error': 'missing clientId'}, 400)
+        room = find_room_by_client(cid)
+        if not room:
+            return self._json({'error': '无可用房间'}, 404)
+        room._touch(cid)
+        return self._json({'roomId': room.id, 'playerId': cid})
+
+    def _api_chat(self, data):
+        pid = _as_str(data.get('playerId'), 64)
+        text = data.get('text', '')
+        if not pid:
+            return self._json({'error': 'missing playerId'}, 400)
+        room = find_room_by_client(pid)
+        if not room:
+            return self._json({'error': '不在房间'}, 404)
+        ok, err = room.send_chat(pid, text)
+        if not ok:
+            return self._json({'error': err}, 400)
+        return self._json({'ok': True})
+
+    def _api_action(self, data):
+        pid = _as_str(data.get('playerId'), 64)
+        action = _as_str(data.get('action'), 32)
+        if not pid:
+            return self._json({'error': 'missing playerId'}, 400)
+        room = find_room_by_client(pid)
+        if not room:
+            return self._json({'error': '不在房间'}, 404)
+        if action == 'start':
+            ok, err = room.start(pid)
+        elif action == 'buy':
+            ok, err = room.buy(pid, _as_int(data.get('index'), -1))
+        elif action == 'sell':
+            src = _as_str(data.get('source'), 16)
+            if src == 'bench':
+                ok, err = room.sell(pid, src, _as_int(data.get('index'), -1))
+            else:
+                ok, err = room.sell(pid, src, _as_str(data.get('index'), 16))
+        elif action == 'place':
+            ok, err = room.place(pid, _as_int(data.get('benchIndex'), -1),
+                                 _as_int(data.get('x'), -1), _as_int(data.get('y'), -1))
+        elif action == 'retrieve':
+            ok, err = room.retrieve(pid, _as_int(data.get('x'), -1),
+                                    _as_int(data.get('y'), -1))
+        elif action == 'ready':
+            ok, err = room.toggle_ready(pid)
+        elif action == 'refresh':
+            ok, err = room.refresh_shop(pid)
+        elif action == 'leave':
+            leave_room(pid, room.id, penalize=True)
+            return self._json({'ok': True})
+        else:
+            ok, err = False, f'未知操作 {action}'
+        if not ok:
+            return self._json({'error': err}, 400)
+        return self._json({'ok': True})
 
 
 def get_local_ip():
@@ -2497,32 +2571,71 @@ def get_local_ip():
         return '127.0.0.1'
 
 
+def _setup_utf8_console():
+    """Windows 控制台默认使用本地代码页；显式切到 UTF-8 才能正确显示中文。"""
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding='utf-8', errors='replace')
+        except (AttributeError, ValueError):
+            pass
+    if sys.platform == 'win32':
+        try:
+            import ctypes
+            ctypes.windll.kernel32.SetConsoleOutputCP(65001)
+        except Exception:
+            pass
+
+
+def resolve_bind(argv=None):
+    """绑定优先级：CLI > 环境变量 OI_CHESS_HOST / OI_CHESS_PORT > 内置默认值。"""
+    parser = argparse.ArgumentParser(description='OI-chess LAN server')
+    parser.add_argument('--host', default=None, help='bind address (default 0.0.0.0)')
+    parser.add_argument('--port', type=int, default=None, help='listen port (default 8080)')
+    args, _ = parser.parse_known_args(argv)
+    host = args.host or os.environ.get('OI_CHESS_HOST', '').strip() or HOST
+    env_port = os.environ.get('OI_CHESS_PORT', '').strip()
+    raw = args.port if args.port is not None else (env_port or PORT)
+    try:
+        port = int(raw)
+    except (TypeError, ValueError):
+        raise SystemExit('port must be an integer, got: %r' % (raw,))
+    if not (1 <= port <= 65535):
+        raise SystemExit('port out of range: %s' % port)
+    return host, port
+
+
 def main():
+    _setup_utf8_console()
+    host, port = resolve_bind()
     STATIC_DIR.mkdir(exist_ok=True)
     load_profiles()
     missing = [f for f in ['index.html', 'style.css', 'script.js']
                if not (STATIC_DIR / f).exists()]
     if missing:
-        print('!! \u7f3a\u5c11\u9759\u6001\u6587\u4ef6:', missing)
+        print('!! 缺少静态文件:', missing)
         if sys.stdin.isatty():
-            input('\u6309\u56de\u8f66\u9000\u51fa...')
-        return
-    print(f'\u5df2\u52a0\u8f7d {len(PROFILES)} \u540d\u73a9\u5bb6\u6863\u6848')
+            input('按回车退出...')
+        return 1
+    print(f'已加载 {len(PROFILES)} 名玩家档案')
     threading.Thread(target=tick_loop, daemon=True).start()
     try:
-        with QuietThreadingTCPServer((HOST, PORT), Handler) as httpd:
+        with QuietThreadingTCPServer((host, port), Handler) as httpd:
             ip = get_local_ip()
             print('=' * 50)
-            print('  OI chess \xb7 \u5c40\u57df\u7f51\u670d\u52a1\u5668')
-            print(f'  \u672c\u673a:   http://127.0.0.1:{PORT}')
-            print(f'  \u5c40\u57df\u7f51: http://{ip}:{PORT}')
+            print('  OI chess · 局域网服务器')
+            print(f'  本机:   http://127.0.0.1:{port}')
+            print(f'  局域网: http://{ip}:{port}')
             print('=' * 50)
             httpd.serve_forever()
     except OSError as e:
-        print(f'!! \u7aef\u53e3 {PORT} \u88ab\u5360\u7528: {e}')
+        print(f'!! 端口 {port} 被占用或无法绑定: {e}')
+        print('   换端口重试: python3 server.py --port 8123')
+        print('   或设置环境变量 OI_CHESS_PORT=8123')
+        return 1
     except KeyboardInterrupt:
-        print('\n\u5df2\u505c\u6b62')
+        print('\n已停止')
+    return 0
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

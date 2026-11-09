@@ -2,6 +2,8 @@
 
 **当前界面版本：ui-polish-1。** 本轮做了**整体视觉精修与信息可读性**优化：页面底与面板表面分层、纯黑细线改为柔和边框、面板/卡片/按钮加圆角与轻阴影、悬停与焦点反馈、棋盘网格线单独提对比、状态栏与卡面关键字号整体上调一档、羁绊档位效果改为独立 chip 分组并高亮激活态；浅色与深色主题同步适配。背景格线、点击格与棋子仍统一为 CSS Grid（详见 `docs/放置错位修复.md`），布局结构与棋盘对齐逻辑未改，8 视口 × 3 阶段布局回归与放置命中误差仍为 0。此前已修复半屏布局遮挡与商店卡片显示不全，并把卡牌从 35 张扩到 **50 张**、加入 6 种全新战斗机制与商店升星保底，以及启动前检查更新（**代理可选**：首次启动 `start.bat` 会询问一次直连还是走代理，选择保存在本地 `update_config.bat`，运行 `start.bat setup` 可重新选择；也可用环境变量 `OI_CHESS_PROXY=http://127.0.0.1:7890` 指定）。此前还新增了**技能去重与全局羁绊**：50 张卡改为 **50 种互不重复的技能**，新增按流派 2/4/6 档的**羁绊机制**，场上棋子上限从 15 提到 **20**；以及**准备期无倒计时**（全员点「准备」后立即开战）与**羁绊开战视觉反馈**。CSS 与 JS 缓存版本均已同步为 `ui-polish-1`，更新后浏览器请按 Ctrl+F5 强制刷新。
 
+本轮（**v1.7.5-maintainability**）是**项目治理与可维护性**更新，不涉及游戏机制与界面：新增 MIT `LICENSE` 与 GitHub Actions CI；`server.py` 改为 UTF-8 可读源码（4491 处 `\uXXXX` 反转义）、端口支持 `--port` / `OI_CHESS_PORT` 覆盖、三个巨型函数拆为分派表与 helper；删除工作区里的历史后端 `audit/before/`，改用只读数据快照；修正文档断言数与「仅标准库」表述，并写明可信局域网安全边界。改动前后 1150 场对局逐字段对比完全一致，59,200 场全池实战已按当前源码重跑。界面版本与 CSS/JS 缓存版本仍为 `ui-polish-1`，详见 `运行与验证.md`。
+
 ## Windows 启动
 
 1. 完整解压文件夹，不要直接在压缩包中运行。
@@ -18,9 +20,13 @@ py -3 server.py
 python server.py
 ```
 
-建议使用 Python 3.10 或更新版本。游戏运行只使用 Python 标准库，不需要先安装其他依赖。启动后按终端提示访问网页。
+建议使用 Python 3.10 或更新版本。**运行时零第三方依赖**（仅 Python 标准库）；回归测试中的浏览器用例需要额外安装 Playwright 与 Chromium，普通玩家启动游戏无需安装。启动后按终端提示访问网页。
 
-**Windows 编码修复已合入：** 根目录 `server.py` 仅含 ASCII 字节，中文以 Unicode 转义保留，运行时正常显示中文；与实战测试源码的语法树一致。不要从聊天中复制整份源码，也不要运行 `audit/before/` 内的历史备份。
+端口默认 `8080`，可用 `--port 8123` 或环境变量 `OI_CHESS_PORT=8123` 覆盖。
+
+> **安全边界**：服务端监听 `0.0.0.0`，当前身份模型是客户端自报 `clientId`，没有身份鉴权、CSRF 防护与频率限制，且允许跨域。**仅可在可信局域网内开黑使用，不要直接暴露到公网**；如需公网访问，必须置于带 TLS 与认证的反向代理之后。
+
+**源码与编码：** `server.py` 使用 UTF-8 保存中文源码，入口会 reconfigure 标准输出；Windows 启动器先执行 `chcp 65001` 切换控制台代码页，Windows / Linux 均正常显示中文。平衡调整前的旧后端已移入 git history，工作区只保留 `audit/baseline/cards_before.json` 这份数据快照，不再有可误运行的旧源码。
 
 ## 当前版本关键数值
 
@@ -111,6 +117,9 @@ python server.py
 | `balance/` | 当前实战汇总数据 |
 | `audit/` | 本轮可复现结果、测试日志与必要历史对照 |
 | `data/` | 运行时本地产生的玩家数据 |
+| `LICENSE` | MIT 授权声明 |
+| `.github/workflows/ci.yml` | GitHub Actions CI（标准库 + 浏览器两档回归） |
+| `audit/baseline/cards_before.json` | 旧卡攻血只读数据快照（替代历史可运行后端） |
 
 `特效预览.html` / `动画预览.html` 由 `tools/make_demo.py`、`tools/make_effect_demo.py` 生成，会自动内嵌当前 `static/style.css` 与 `static/script.js`，改样式后重跑生成即可保持离线预览与主界面一致。
 
@@ -118,10 +127,12 @@ python server.py
 
 ## 验证
 
-发布包由 `tools/make_release.py` 生成，它在打包前强制校验 `版本清单.json` 全部哈希、`server.py` 为 ASCII-only、以及 `audit/final/meta.json` 记录的源码哈希与当前 `server.py` 一致；改动服务器源码后必须先重跑全池实战，否则打包会直接失败。
+发布包由 `tools/make_release.py` 生成，它在打包前强制校验 `版本清单.json` 全部哈希、`server.py` 为合法 UTF-8、以及 `audit/final/meta.json` 记录的源码哈希与当前 `server.py` 一致；改动服务器源码后必须先重跑全池实战，否则打包会直接失败。
 
-详见 `运行与验证.md`。当前已通过 530 项机制合同（逐卡核对）、75 项新机制定向断言（`tests/test_new_mechanics.py`）、18 组精确时序、满编随机战斗、8 视口布局回归和浏览器报告校验。完整报告中的实战结果基于记录的测试条件，不代表所有阵容都被穷举。
+详见 `运行与验证.md`。当前已通过 530 项机制合同（逐卡核对）、79 项新机制定向断言（`tests/test_new_mechanics.py`）、18 组精确时序、满编随机战斗、8 视口布局回归和浏览器报告校验。完整报告中的实战结果基于记录的测试条件，不代表所有阵容都被穷举。
+
+`.github/workflows/ci.yml` 把上述验证拆成两个任务：`stdlib` 跑 13 个纯标准库测试、`py_compile`、`node --check` 与 `tools/make_release.py` 发布闸门；`browser` 安装 Playwright / Chromium 后跑 6 个浏览器回归。push 到 `main`、Pull Request 与手动触发时自动执行。
 
 ## 版本控制
 
-项目纳入 Git 后，`.gitignore` 排除运行时玩家存档 `data/`、Python 缓存、测试截图与发布压缩包；`tools/make_release.py` 生成 `版本清单.json` 和压缩包时同样跳过 `.git/`，避免版本库元数据混入交付物。首次克隆后按「运行」一节启动即可，无需额外依赖。
+项目纳入 Git 后，`.gitignore` 排除运行时玩家存档 `data/`、Python 缓存、测试截图与发布压缩包；`tools/make_release.py` 生成 `版本清单.json` 和压缩包时同样跳过 `.git/`，避免版本库元数据混入交付物。首次克隆后按「运行」一节启动即可，无需额外依赖。仓库采用 **MIT 授权**（见 `LICENSE`）；`.github/workflows/ci.yml` 提供 push / PR 自动回归。
