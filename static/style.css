@@ -126,6 +126,14 @@ body {
 .update-banner b { color: var(--heal-color); }
 .update-banner .update-links { display: flex; gap: 12px; margin-top: 4px; }
 .update-banner a { color: var(--heal-color); text-decoration: underline; }
+/* 一键更新按钮：区别于右上角的关闭 × */
+.update-banner .update-apply {
+  position: static;
+  border: 1px solid var(--accent); background: var(--accent-soft);
+  color: var(--accent); border-radius: 6px;
+  padding: 4px 12px; font-size: 12px; cursor: pointer; font-family: inherit;
+}
+.update-banner .update-apply:disabled { opacity: .6; cursor: wait; }
 .update-banner button {
   position: absolute; top: 4px; right: 6px;
   border: 0; background: transparent; color: var(--muted);

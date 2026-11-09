@@ -168,17 +168,23 @@ with patch.object(u, 'check',
     u.main(['--proxy'])
 ok(captured.get('proxy') is None, '--proxy without a value forces direct')
 
-# ---- 启动器：先检查再起服务，且保持 ASCII-only ----
+# ---- 启动器：每次都问代理、先自动更新再起服务，且保持 ASCII-only ----
 bat = (R / 'start.bat').read_bytes()
 ok(bat.isascii(), 'start.bat stays ASCII-only')
 s = bat.decode('ascii')
-ok(s.index('check_update.py') < s.index('server.py'),
-   'update check runs before the server starts')
-ok(s.count('check_update.py') == 2, 'both py and python branches check for updates')
+au_src = (R / 'auto_update.py').read_text('utf-8')
+ok('auto_update.py' in s and 'auto_update.py' in au_src,
+   'the launcher auto update is wired in start.bat and auto_update.py exists')
+ok(s.index('auto_update.py') < s.index('server.py'),
+   'auto update runs before the server starts')
+ok(s.count('auto_update.py') == 2, 'both py and python branches auto update')
 ok((R / 'check_update.py').is_file(), 'check_update.py ships with the project')
 ok('update_config.bat' in s, 'start.bat persists the proxy choice to update_config.bat')
 ok('setup' in s and 'askproxy' in s, 'start.bat setup re-asks the proxy choice')
 ok('OI_CHESS_PROXY' in s, 'start.bat exports OI_CHESS_PROXY from the saved choice')
+ok('OI_CHESS_PROXY_MODE' in s, 'the saved choice records direct vs proxy mode')
+# 关键回归：不能再因为 update_config.bat 存在就跳过询问。
+ok('goto runcheck' not in s, 'an existing config no longer skips the proxy question')
 ok(u.PROXY_ENV in (R / '.gitignore').read_text('utf-8').replace('OI_CHESS_PROXY',
    'OI_CHESS_PROXY') or 'update_config.bat' in (R / '.gitignore').read_text('utf-8'),
    'update_config.bat is git-ignored (local machine state)')

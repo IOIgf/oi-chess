@@ -1705,8 +1705,9 @@ async function checkUpdate() {
     banner.innerHTML =
       '发现新版本 <b>' + escapeHtml(d.tag_name) + '</b>（当前 ' + escapeHtml(local) + '）'
       + '<div class="update-links">'
+      + '<button type="button" class="update-apply" id="applyUpdateBtn" onclick="applyUpdate()">立即更新并重启</button>'
       + (d.html_url ? '<a href="' + escapeHtml(d.html_url) + '" target="_blank" rel="noopener">查看更新</a>' : '')
-      + (dl ? '<a href="' + escapeHtml(dl) + '" target="_blank" rel="noopener">下载</a>' : '')
+      + (dl ? '<a href="' + escapeHtml(dl) + '" target="_blank" rel="noopener">手动下载</a>' : '')
       + '</div>'
       + '<button type="button" aria-label="关闭" onclick="dismissUpdate()">×</button>';
     banner.classList.remove('hidden');
@@ -1715,6 +1716,44 @@ async function checkUpdate() {
   } finally {
     clearTimeout(timer);
   }
+}
+// 一键更新：服务端后台下载安装，完成后提示重启
+let updateTimer = null;
+async function applyUpdate() {
+  const btn = document.getElementById('applyUpdateBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '正在更新…'; }
+  try {
+    await api('/api/update', 'POST', { action: 'apply' });
+    if (updateTimer) clearInterval(updateTimer);
+    updateTimer = setInterval(pollUpdate, 1500);
+    pollUpdate();
+  } catch (e) {
+    showUpdateText('更新失败：' + (e && e.message ? e.message : e));
+  }
+}
+async function pollUpdate() {
+  try {
+    const d = await api('/api/update', 'POST', { action: 'status' });
+    if (d.busy) { showUpdateText('正在更新：' + (d.message || '下载安装中…')); return; }
+    clearInterval(updateTimer); updateTimer = null;
+    if (d.status === 'updated') {
+      showUpdateText('已更新到 <b>' + escapeHtml(d.remote || '') + '</b>，'
+        + '请重启服务器（退出 start.bat 再运行一次即可），'
+        + '玩家存档与代理设置已保留');
+    } else if (d.status === 'git') {
+      showUpdateText('检测到 Git 目录，请用 git pull 更新');
+    } else {
+      showUpdateText('更新未完成：' + escapeHtml(d.error || d.status || '未知原因')
+        + '。可手动下载安装。');
+    }
+  } catch (e) { /* 轮询失败下次再试 */ }
+}
+function showUpdateText(html) {
+  const banner = document.getElementById('updateBanner');
+  if (!banner) return;
+  banner.innerHTML = html
+    + '<button type="button" aria-label="关闭" onclick="dismissUpdate()">×</button>';
+  banner.classList.remove('hidden');
 }
 function dismissUpdate() {
   const b = document.getElementById('updateBanner');

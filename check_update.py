@@ -4,7 +4,8 @@
 设计约束（与项目「标准库 + 可离线 + 可复现」的定位一致）：
 - 只用 Python 标准库，不写任何文件、不改项目状态、不下载任何东西；
 - 离线 / 超时 / API 异常一律静默跳过，退出码恒为 0，绝不阻塞启动；
-- 只提示，不自动更新：覆盖文件会破坏发布包可复现性并可能碰到玩家存档；
+- 只检查不安装：真正的「下载 + 校验 + 备份 + 覆盖安装 + 回滚」由
+  auto_update.py 负责（start.bat 在启动服务器前调用它）；
 - 本地版本取自 static/index.html 的 <meta name="oi-chess-release">，
   与发布闸门、浏览器端共用同一个真相源。
 
@@ -36,7 +37,7 @@ TIMEOUT_ENV = 'OI_CHESS_UPDATE_TIMEOUT'
 PROXY_ENV = 'OI_CHESS_PROXY'
 DEFAULT_TIMEOUT = 2.5
 # index.html 缺失时的兜底值；发布新版本时必须与 index.html 的 meta 一起更新。
-FALLBACK_TAG = 'v1.9.1-pairing-scope'
+FALLBACK_TAG = 'v1.10.0-auto-update'
 # 这些取值（忽略大小写）表示「直连，不走代理」。
 PROXY_OFF = ('', '0', 'no', 'none', 'direct', 'off')
 # check(proxy=...) 的哨兵：None 表示显式直连，_ENV 表示读环境变量。

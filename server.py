@@ -2506,6 +2506,38 @@ class QuietThreadingTCPServer(socketserver.ThreadingTCPServer):
         super().handle_error(request, client_address)
 
 
+# ---- 游戏内一键更新（/api/update）---------------------------------------
+# 更新任务由 auto_update.py 执行；状态放在全局字典里供前端轮询。
+UPDATE_LOCK = threading.Lock()
+UPDATE_STATE = {'busy': False, 'status': 'idle', 'message': '', 'error': '',
+                'remote': '', 'backup': ''}
+
+
+def _run_update_task():
+    """后台线程：下载并安装新版本；结果写进 UPDATE_STATE。"""
+    try:
+        import auto_update
+        root = Path(__file__).resolve().parent
+        res = auto_update.apply_update(root=root)
+    except Exception as e:
+        res = {'status': 'failed', 'error': '%s: %s' % (type(e).__name__, e)}
+    with UPDATE_LOCK:
+        if res.get('status') == 'updated':
+            UPDATE_STATE.update({'busy': False, 'status': 'updated',
+                                 'remote': res.get('remote', ''),
+                                 'backup': res.get('backup', ''),
+                                 'message': '更新完成，重启服务器后生效',
+                                 'error': ''})
+        elif res.get('status') == 'failed':
+            UPDATE_STATE.update({'busy': False, 'status': 'failed',
+                                 'error': res.get('error', '未知错误'),
+                                 'message': ''})
+        else:                                  # latest / skipped / git / offline
+            UPDATE_STATE.update({'busy': False, 'status': res.get('status', 'idle'),
+                                 'error': res.get('error', ''),
+                                 'message': ''})
+
+
 class Handler(http.server.BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass
@@ -2651,6 +2683,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         '/api/rejoin': '_api_rejoin',
         '/api/chat': '_api_chat',
         '/api/action': '_api_action',
+        '/api/update': '_api_update',
     }
 
     def _handle_post(self):
@@ -2737,6 +2770,26 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if not ok:
             return self._json({'error': err}, 400)
         return self._json({'ok': True})
+
+    def _api_update(self, data):
+        """游戏内一键更新：后台下载并安装新版本。
+
+        绝不阻塞请求线程：下载与校验可能耗时数十秒，必须放后台。
+        安装会替换磁盘上的 server.py，但当前进程跑的还是旧代码，
+        因此更新完成后提示玩家重启服务器才生效。
+        """
+        action = _as_str(data.get('action'), 16) or 'check'
+        if action == 'status':
+            return self._json(dict(UPDATE_STATE))
+        if action != 'apply':
+            return self._json({'error': '未知操作 %s' % action}, 400)
+        if UPDATE_STATE.get('busy'):
+            return self._json({'error': '正在更新中，请稍候'}, 409)
+        with UPDATE_LOCK:
+            UPDATE_STATE.update({'busy': True, 'status': 'running',
+                                 'message': '正在下载新版本…', 'error': ''})
+        threading.Thread(target=_run_update_task, daemon=True).start()
+        return self._json({'ok': True, 'status': 'running'})
 
     def _api_action(self, data):
         pid = _as_str(data.get('playerId'), 64)

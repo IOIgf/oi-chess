@@ -12,3 +12,4 @@ audit/placement/*.png
 # Generated release archives
 *.zip
 update_config.bat
+update_backup/

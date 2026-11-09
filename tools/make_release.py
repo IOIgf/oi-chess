@@ -28,12 +28,14 @@ for p in R.rglob('*'):
     rel=p.relative_to(R)
     # rglob('*') descends into hidden dirs; skip VCS metadata so a .git/
     # never leaks into 版本清单.json or the release archive.
-    if any(x in rel.parts for x in ['__pycache__','data','shots','stress_data','.git']):continue
+    if any(x in rel.parts for x in ['__pycache__','data','shots','stress_data','.git','update_backup']):continue
     if p.suffix in ['.pyc','.zip'] or rel.as_posix()=='版本清单.json':continue
+    # 本机状态文件绝不能进包：用户的代理选择与更新备份不属于发布内容。
+    if rel.as_posix()=='update_config.bat':continue
     if rel.parts[:2]==('audit','fx') and p.suffix=='.png':continue
     if rel.parts[:2]==('audit','placement') and p.suffix=='.png':continue
     files.append(p)
-manifest={'release':'最新版（50 张卡 = 50 种独立技能 + 全局羁绊机制 + 场上上限 20 + 负面技能平衡 + 启动前检查更新（代理可选） + 准备期无倒计时（全员点准备才开战） + 商店升星保底 + 按等级解锁卡池 + 状态轮询瘦响应 + 半屏布局遮挡修复 + 可复现性校验 + Windows 编码修复 + 启动期控制台编码兜底（非中文代码页不崩） + 退出期标准流 flush 兜底（无 Exception ignored） + 整体视觉精修与信息可读性 + 项目治理（MIT LICENSE / GitHub Actions CI / UTF-8 可读源码 / 端口可配置 / 巨型函数拆分 / 历史后端清理）+ AI 对战（创建房间可选 1~3 个电脑对手 / 简单·普通·困难三档 / 准备期自动买卡布阵与准备 / 独立随机流不污染战斗）+ 轮空公平轮换（奇数人数不再有人被长期锁定轮空 / 与血量无关 / 轮空次数可见）+ 加电脑时间窗口明确（仅开局之前可加，开局后一律拒绝））','build':'pairing-scope-1','release_tag':RELEASE_TAG,'entrypoint':'start.bat（启动前检查更新）/ py -3 server.py','server_utf8':bool((R/'server.py').read_bytes().decode('utf-8')),'current_cards':{'o2':{'attack':0,'hp':280,'cost':3,'aura_speed_multiplier':2},'spfa':{'attack':120,'hp':1000,'cost':3}},'files':{p.relative_to(R).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)}}
+manifest={'release':'最新版（50 张卡 = 50 种独立技能 + 全局羁绊机制 + 场上上限 20 + 负面技能平衡 + 启动前检查更新（代理可选） + 准备期无倒计时（全员点准备才开战） + 商店升星保底 + 按等级解锁卡池 + 状态轮询瘦响应 + 半屏布局遮挡修复 + 可复现性校验 + Windows 编码修复 + 启动期控制台编码兜底（非中文代码页不崩） + 退出期标准流 flush 兜底（无 Exception ignored） + 整体视觉精修与信息可读性 + 项目治理（MIT LICENSE / GitHub Actions CI / UTF-8 可读源码 / 端口可配置 / 巨型函数拆分 / 历史后端清理）+ AI 对战（创建房间可选 1~3 个电脑对手 / 简单·普通·困难三档 / 准备期自动买卡布阵与准备 / 独立随机流不污染战斗）+ 轮空公平轮换（奇数人数不再有人被长期锁定轮空 / 与血量无关 / 轮空次数可见）+ 加电脑时间窗口明确（仅开局之前可加，开局后一律拒绝）+ 自动更新（启动器自动下载安装 / 游戏内一键更新 / 双重 SHA256 校验 / 备份回滚 / 玩家存档与代理配置永不覆盖）+ 代理选择每次启动可改（回车沿用上次））','build':'auto-update-1','release_tag':RELEASE_TAG,'entrypoint':'start.bat（启动前检查更新）/ py -3 server.py','server_utf8':bool((R/'server.py').read_bytes().decode('utf-8')),'current_cards':{'o2':{'attack':0,'hp':280,'cost':3,'aura_speed_multiplier':2},'spfa':{'attack':120,'hp':1000,'cost':3}},'files':{p.relative_to(R).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(files)}}
 (R/'版本清单.json').write_text(json.dumps(manifest,ensure_ascii=False,indent=2));files.append(R/'版本清单.json')
 with zipfile.ZipFile(DEST,'w',zipfile.ZIP_DEFLATED) as z:
     z.writestr('oi-chess/data/','')
@@ -54,8 +56,20 @@ with tempfile.TemporaryDirectory() as tmp:
     assert (root/'static/script.js').exists() and (root/'start.bat').read_bytes().isascii()
     _cu=root/'check_update.py';assert _cu.exists(),'check_update.py missing from release'
     _cus=_cu.read_text('utf-8');assert 'urllib.request' in _cus and 'import requests' not in _cus
+    _au=root/'auto_update.py';assert _au.exists(),'auto_update.py missing from release'
+    _aus=_au.read_text('utf-8');assert 'urllib.request' in _aus and 'import requests' not in _aus
+    # 自动更新必须保留玩家存档，且绝不把本机状态打进包里。
+    assert "'data'" in _aus.split('PROTECTED_DIRS = ')[1].split('\n')[0], \
+        'auto_update.py must protect the data dir'
+    assert not (root/'update_config.bat').exists(), \
+        'the local proxy config must never ship in the release package'
+    assert not (root/'update_backup').exists(), \
+        'update backups must never ship in the release package'
+    # 启动器：先自动更新再起服务；代理菜单每次启动都出现。
     _sb=(root/'start.bat').read_bytes().decode('ascii')
-    assert _sb.index('check_update.py')<_sb.index('server.py'),'start.bat must check updates before launching'
+    assert _sb.index('auto_update.py')<_sb.index('server.py'),'start.bat must auto update before launching'
+    assert _sb.count('auto_update.py')==2,'start.bat must auto update in both py and python branches'
+    assert 'askproxy' in _sb and 'reuse last choice' in _sb,'start.bat must ask the proxy choice every launch'
     _im=re.search(r'<meta\s+name="oi-chess-release"\s+content="([^"]+)"',(root/'static'/'index.html').read_text('utf-8'))
     assert _im and m['release_tag']==_im.group(1),'release_tag disagrees with index.html'
     assert not list((root/'data').iterdir())
