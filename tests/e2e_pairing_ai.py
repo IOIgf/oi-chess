@@ -1,10 +1,9 @@
-"""端到端验证：奇数人轮空轮换 + 局内加电脑（真实 HTTP）。
+"""端到端验证：奇数人轮空轮换 + 加电脑的时间窗口（真实 HTTP）。
 
-流程：
-  1. 3 名真人进同一房间并开局
-  2. 打完 2 个完整回合，从服务器配对日志里取每轮的轮空者，验证换人
-  3. 第 3 回合准备期，房主通过 /api/action 的 addAi 加一名电脑
-     验证：电脑加入后立即买卡布阵并点「准备」、人数变偶数后不再有人轮空
+覆盖三条边界：
+  1. 轮空公平：奇数人数时每轮 1 人轮空，且轮空者会换人
+  2. 开局之前：等待大厅里房主可以随时加电脑（凑成偶数后不再有人轮空）
+  3. 开局之后：准备期与战斗期调用 addAi 一律被拒绝，且房间状态不受影响
 """
 import json
 import re
@@ -45,10 +44,31 @@ def ready(pid):
     api('/api/action', 'POST', {'playerId': pid, 'action': 'ready'})
 
 
-def bye_players_from_log(seen):
-    """从服务器配对日志里解析出已经出现过的轮空玩家名。"""
+def try_add_ai(pid, level='easy'):
+    """调用 addAi，成功返回结果，失败返回 (status, error)。"""
+    try:
+        res = api('/api/action', 'POST',
+                  {'playerId': pid, 'action': 'addAi', 'level': level})
+        return 200, res
+    except urllib.error.HTTPError as e:
+        body = json.loads(e.read().decode('utf-8'))
+        return e.code, body
+
+
+def log_byes():
     txt = open(LOG, encoding='utf-8', errors='replace').read()
     return re.findall(r'\[配对\] (.+?) 轮空', txt)
+
+
+def wait_state(pid, want, pred=None, timeout=45):
+    deadline = time.time() + timeout
+    st = state(pid)
+    while time.time() < deadline:
+        st = state(pid)
+        if st['state'] == want and (pred is None or pred(st)):
+            return st
+        time.sleep(0.4)
+    return st
 
 
 def main():
@@ -65,140 +85,81 @@ def main():
         else:
             raise SystemExit('server did not start')
 
-        # ---- 建房：3 名真人 -------------------------------------------------
+        # ================= 第 1 局：3 名真人（不加电脑）====================
         r1 = api('/api/rooms', 'POST',
                  {'clientId': 'e2e-1', 'name': '甲', 'aiCount': 0, 'aiLevel': 'normal'})
         rid = r1['roomId']
         api('/api/join', 'POST', {'clientId': 'e2e-2', 'name': '乙', 'roomId': rid})
         api('/api/join', 'POST', {'clientId': 'e2e-3', 'name': '丙', 'roomId': rid})
+        ok(len(state('e2e-1')['players']) == 3, '三名真人进入同一房间')
+
+        # 等待大厅里房主可以加电脑 -> 这一局也顺便验证「开局前可加」
+        code, body = try_add_ai('e2e-1', 'hard')
+        ok(code == 200 and str(body.get('aiId', '')).startswith('ai:'),
+           f'开局之前房主可以加电脑（aiId={body.get("aiId")}）')
         st = state('e2e-1')
-        ok(len(st['players']) == 3, '三名真人进入同一房间')
+        ok(len(st['players']) == 4, '加完电脑后房间 4 人')
+        ai_id = body['aiId']
+        ok(st['players'][ai_id]['isAi'] is True, '新成员被标记为电脑')
+        ok(st['players'][ai_id]['ready'] is False, '等待期的电脑还没准备（等开局）')
+        code2, body2 = try_add_ai('e2e-2', 'easy')
+        ok(code2 == 400 and '房主' in body2.get('error', ''),
+           '非房主加电脑被拒绝：' + body2.get('error', ''))
+
+        # 把人数变回奇数，验证轮空换人：再加一个 AI 后是 5 人，再撤不掉，
+        # 因此这一局改用 4 人偶数开局，轮空换人放到第 2 局验证。
         api('/api/action', 'POST', {'playerId': 'e2e-1', 'action': 'start'})
         ok(state('e2e-1')['state'] == 'prep', '开局进入准备期')
+        ok(state(ai_id)['players'][ai_id]['ready'] is True,
+           '开局后电脑自动点了「准备」')
+        ok(len(state(ai_id)['players'][ai_id].get('board') or {}) > 0,
+           '开局后电脑完成了买卡布阵')
 
-        # ---- 第 1 回合：3 人奇数，应有 1 人轮空 ----------------------------
+        # 3. 开局之后不能再加电脑
+        code3, body3 = try_add_ai('e2e-1', 'easy')
+        ok(code3 == 400 and '游戏已开始' in body3.get('error', ''),
+           '准备期加电脑被拒绝：' + body3.get('error', ''))
+        ok(len(state('e2e-1')['players']) == 4, '被拒绝的加电脑没有改变人数')
+
         for pid in ('e2e-1', 'e2e-2', 'e2e-3'):
             ready(pid)
-        st = state('e2e-1')
-        ok(st['state'] == 'prep', '全员点准备后仍在准备期（等开战）')
-
-        # 等战斗开始
-        deadline = time.time() + 12
-        while time.time() < deadline:
-            st = state('e2e-1')
-            if st['state'] == 'battle':
-                break
-            time.sleep(0.3)
+        st = wait_state('e2e-1', 'battle', timeout=15)
         ok(st['state'] == 'battle', '全员就绪后立即开战')
-        log_byes = bye_players_from_log(None)
-        ok(len(log_byes) == 1, f'第 1 轮恰好 1 人轮空（日志：{log_byes}）')
+        ok(len(log_byes()) == 0, f'4 人偶数局没人轮空（日志：{log_byes()}）')
 
-        # ---- 等第 1 回合结束，进入第 2 回合准备期 ---------------------------
-        deadline = time.time() + 45
-        while time.time() < deadline:
-            st = state('e2e-1')
-            if st['state'] == 'prep' and st['round'] >= 2:
-                break
-            time.sleep(0.5)
-        ok(st['state'] == 'prep' and st['round'] >= 2, '第 1 回合结算后进入第 2 回合准备期')
+        # 战斗期也不能加
+        code4, body4 = try_add_ai('e2e-1', 'easy')
+        ok(code4 == 400 and '游戏已开始' in body4.get('error', ''),
+           '战斗期加电脑被拒绝：' + body4.get('error', ''))
+        ok(len(state('e2e-1')['players']) == 4, '战斗期被拒绝的加电脑没有改变人数')
 
-        # ---- 第 2 回合：仍是 3 人奇数，轮空者应当换人 -----------------------
-        for pid in ('e2e-1', 'e2e-2', 'e2e-3'):
+        # ================= 第 2 局：3 名真人奇数局，验证轮空换人 ==========
+        r2 = api('/api/rooms', 'POST',
+                 {'clientId': 'e2e-4', 'name': '丁', 'aiCount': 0, 'aiLevel': 'normal'})
+        rid2 = r2['roomId']
+        api('/api/join', 'POST', {'clientId': 'e2e-5', 'name': '戊', 'roomId': rid2})
+        api('/api/join', 'POST', {'clientId': 'e2e-6', 'name': '己', 'roomId': rid2})
+        api('/api/action', 'POST', {'playerId': 'e2e-4', 'action': 'start'})
+        for pid in ('e2e-4', 'e2e-5', 'e2e-6'):
             ready(pid)
-        deadline = time.time() + 12
-        while time.time() < deadline:
-            st = state('e2e-1')
-            if st['state'] == 'battle':
-                break
-            time.sleep(0.3)
-        ok(st['state'] == 'battle', '第 2 回合全员就绪后开战')
-        log_byes2 = bye_players_from_log(None)
-        ok(len(log_byes2) == 2, f'第 2 轮又轮空 1 人（累计日志：{log_byes2}）')
-        ok(log_byes2[0] != log_byes2[1],
-           f'轮空者换人了：第 1 轮 {log_byes2[0]} → 第 2 轮 {log_byes2[1]}')
+        st = wait_state('e2e-4', 'battle', timeout=15)
+        ok(st['state'] == 'battle', '奇数局全员就绪后开战')
+        byes1 = log_byes()
+        ok(len(byes1) == 1, f'3 人奇数局恰好 1 人轮空（日志：{byes1}）')
 
-        # ---- 等第 2 回合结束，进入第 3 回合准备期 ---------------------------
-        deadline = time.time() + 45
-        while time.time() < deadline:
-            st = state('e2e-1')
-            if st['state'] == 'prep' and st['round'] >= 3:
-                break
-            time.sleep(0.5)
-        ok(st['state'] == 'prep' and st['round'] >= 3, '进入第 3 回合准备期')
-
-        # ---- 局内加电脑（准备期）：3 真人 + 1 电脑 = 4 人偶数 ----------------
-        st = state('e2e-1')
-        ok(st['state'] == 'prep', '当前处于准备期，可加电脑')
-        before = len(st['players'])
-        res = api('/api/action', 'POST',
-                  {'playerId': 'e2e-1', 'action': 'addAi', 'level': 'hard'})
-        ok(res.get('ok') and str(res.get('aiId', '')).startswith('ai:'),
-           f'房主在准备期成功加电脑（aiId={res.get("aiId")}）')
-        st = state('e2e-1')
-        ok(len(st['players']) == before + 1, '房间人数 +1')
-        ai_id = res['aiId']
-        ai_row = st['players'][ai_id]
-        ok(ai_row['isAi'] is True and ai_row['aiLevel'] == '困难', '新电脑带难度标记')
-        ok(ai_row['ready'] is True, '新电脑在准备期自动点了「准备」')
-        # 棋盘与商店只对本人可见，所以以新电脑的身份查一次状态
-        ai_self = state(ai_id)['players'][ai_id]
-        ok(0 < len(ai_self.get('board') or {}) <= 20, '新电脑已经买卡布阵')
-        ok(len(ai_self.get('shop') or []) >= 0, '新电脑拿到了商店')
-        ok(state('e2e-2')['players'][ai_id]['isAi'] is True, '其他玩家也能看到该电脑')
-
-        # 非房主不能加
-        try:
-            api('/api/action', 'POST',
-                {'playerId': 'e2e-2', 'action': 'addAi', 'level': 'easy'})
-            ok(False, '非房主加电脑应被拒绝')
-        except urllib.error.HTTPError as e:
-            body = json.loads(e.read().decode('utf-8'))
-            ok(e.code == 400 and '房主' in body.get('error', ''),
-               '非房主加电脑被拒绝：' + body.get('error', ''))
-
-        # ---- 第 3 回合：4 人偶数，不应有人轮空 ------------------------------
-        for pid in ('e2e-1', 'e2e-2', 'e2e-3'):
+        st = wait_state('e2e-4', 'prep', lambda s: s['round'] >= 2, timeout=45)
+        ok(st['state'] == 'prep' and st['round'] >= 2, '第 1 回合结算后进入第 2 回合')
+        for pid in ('e2e-4', 'e2e-5', 'e2e-6'):
             ready(pid)
-        deadline = time.time() + 12
-        while time.time() < deadline:
-            st = state('e2e-1')
-            if st['state'] == 'battle':
-                break
-            time.sleep(0.3)
-        ok(st['state'] == 'battle', '补一名电脑后全员就绪即可开战')
-        log_byes3 = bye_players_from_log(None)
-        ok(len(log_byes3) == 2,
-           f'人数变成偶数后本轮不再新增轮空（日志仍是 {log_byes3}）')
-
-        # ---- 局内加电脑（战斗期）：本轮按轮空处理 --------------------------
-        res2 = api('/api/action', 'POST',
-                   {'playerId': 'e2e-1', 'action': 'addAi', 'level': 'easy'})
-        ok(res2.get('ok'), '房主在战斗期也能加电脑')
-        battle_ai = res2['aiId']
-        st = state('e2e-1')
-        ok(len(st['players']) == 5, '战斗期加电脑后人数 5')
-        ok(st['players'][battle_ai]['ready'] is False,
-           '战斗期加入的电脑还没进入准备期，不会提前准备')
-        ok(state(battle_ai)['players'][battle_ai]['shop'],
-           '战斗期加入的电脑拿到了商店')
-
-        # ---- 等第 3 回合结束，进入第 4 回合准备期 ---------------------------
-        deadline = time.time() + 45
-        while time.time() < deadline:
-            st = state('e2e-1')
-            if st['state'] == 'prep' and st['round'] >= 4:
-                break
-            time.sleep(0.5)
-        ok(st['state'] == 'prep' and st['round'] >= 4, '进入第 4 回合准备期')
-        st = state('e2e-1')
-        ok(st['players'][battle_ai]['ready'] is True,
-           '战斗期加入的电脑在下一轮准备期自动点了「准备」')
-        ok(len(state(battle_ai)['players'][battle_ai].get('board') or {}) > 0,
-           '战斗期加入的电脑在下一轮准备期完成了布阵')
+        st = wait_state('e2e-4', 'battle', timeout=15)
+        byes2 = log_byes()
+        ok(len(byes2) == 2, f'第 2 轮又轮空 1 人（累计日志：{byes2}）')
+        ok(byes2[0] != byes2[1],
+           f'轮空者换人了：第 1 轮 {byes2[0]} → 第 2 轮 {byes2[1]}')
         bye_rows = [p['name'] for p in st['players'].values() if p.get('byeCount')]
         ok(len(bye_rows) >= 1, f'轮空次数对玩家可见：{bye_rows}')
 
-        print('PASS e2e pairing + in-game AI: %d checks' % len(checks))
+        print('PASS e2e pairing + add-ai window: %d checks' % len(checks))
         return 0
     finally:
         srv.terminate()

@@ -651,13 +651,13 @@ class Room:
     def add_ai(self, ai_level='normal'):
         """往房间加入一名电脑对手，返回 (ok, cid | 错误)。
 
-        等待期加入时由 start() 统一发商店；对局中（prep / battle）加入时按
-        当前回合即时初始化，准备期还会立刻完成决策并点「准备」，让房主可以
-        用电脑补齐奇数人数、消除轮空。纯真人对局不会被自动塞入电脑。
+        只在**等待期**（开始游戏之前）可以添加：房间还没开局时房主能随时
+        补电脑，把人数凑成偶数、消除轮空；一旦进入准备期或战斗期就不再
+        接受新成员，避免半路加入打乱已定的配对与战斗帧。
         """
         with self.lock:
-            if self.state == 'ended':
-                return False, '对局已结束'
+            if self.state != 'waiting':
+                return False, '游戏已开始，无法再添加电脑'
             if len(self.players) >= MAX_PLAYERS:
                 return False, '房间已满'
             humans = [q for q in self.players.values() if not q.get('isAi')]
@@ -668,31 +668,10 @@ class Room:
             name = '%s·%s' % (AI_NAMES[n_ai % len(AI_NAMES)],
                               AI_LEVEL_LABELS[level])
             cid = AI_CID_PREFIX + uuid.uuid4().hex[:10]
-            p = new_player(cid, name, is_ai=True, ai_level=level)
-            if self.state != 'waiting':
-                # 与场上真人取同一水平线，避免中途加入的电脑过强或过弱。
-                living = [q for q in humans if not q.get('dead')] or humans
-                for key in ('hp', 'mind', 'reason', 'energy'):
-                    p[key] = int(sum(q[key] for q in living) / len(living))
-                p['gold'] = 18
-                p['level'] = level_for_round(self.round)
-                p['shop'] = self._roll_shop(p['level'], owner=p,
-                                            rng=self._ai_rng(cid))
-            self.players[cid] = p
+            self.players[cid] = new_player(cid, name, is_ai=True, ai_level=level)
             self._assign_color(cid)
             self.version += 1
             self._sys_chat(f'{name} 加入房间（AI 对手）')
-
-            if self.state == 'prep':
-                # 冻结开战门控，避免旧的 prep_end 在新电脑决策完成前抢跑；
-                # 随后 _ai_prep_one -> toggle_ready 会重新检查全员准备状态。
-                self.prep_end = 0.0
-                self.pairs_computed = False
-                self._ai_prep_one(cid)
-            elif self.state == 'battle':
-                # 本轮配对与战斗帧已生成，新电脑本轮视为轮空，下轮起正常参战。
-                self._bye_players.append(cid)
-                self._bye_frames[cid] = self._make_bye_frames(cid)
             return True, cid
 
     @staticmethod
