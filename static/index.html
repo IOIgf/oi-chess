@@ -4,8 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>OI-chess</title>
-<meta name="oi-chess-release" content="v1.10.0-auto-update">
-<link rel="stylesheet" href="/static/style.css?v=auto-update-1">
+<meta name="oi-chess-release" content="v1.10.1-remove-ai">
+<link rel="stylesheet" href="/static/style.css?v=remove-ai-1">
 </head>
 <body>
 
@@ -128,7 +128,7 @@
 
       <div class="opponents" id="opponents"></div>
       <div class="bonds hidden" id="bondList"></div>
-      <small id="uiBuild" style="font-size:10px;color:var(--muted)">界面版本 auto-update-1</small>
+      <small id="uiBuild" style="font-size:10px;color:var(--muted)">界面版本 remove-ai-1</small>
     </aside>
 
     <!-- ========== 棋盘 ========== -->
@@ -313,6 +313,7 @@
         <li>电脑会在每个准备期自己买卡、布阵并点「准备」。<b>你点「准备」后全队立即开战</b>，不用等倒计时。</li>
         <li>电脑使用独立随机流，不占用玩家档案、不参与 Rating 排名，也不会改动卡牌战斗的随机结果；真人全部离开后房间会自动回收。</li>
         <li><b>加电脑的时间窗口只有开局之前</b>：等待大厅里随时能加，点「开始游戏」之后就不能再加了 —— 已定的配对与战斗帧不会中途插人。</li>
+        <li><b>电脑也能删</b>：等待大厅里每台电脑右边有「<b>移除</b>」按钮，房主点一下就能把它请出去，占用的颜色也会立刻释放出来；移除后随时可以再补一台。只有电脑能被移除，真人请自己点「离开」。</li>
       </ul>
 
       <h3>十四、轮空规则</h3>
@@ -346,6 +347,6 @@
   </div>
 </div>
 
-<script src="/static/script.js?v=auto-update-1"></script>
+<script src="/static/script.js?v=remove-ai-1"></script>
 </body>
 </html>

@@ -37,7 +37,7 @@ TIMEOUT_ENV = 'OI_CHESS_UPDATE_TIMEOUT'
 PROXY_ENV = 'OI_CHESS_PROXY'
 DEFAULT_TIMEOUT = 2.5
 # index.html 缺失时的兜底值；发布新版本时必须与 index.html 的 meta 一起更新。
-FALLBACK_TAG = 'v1.10.0-auto-update'
+FALLBACK_TAG = 'v1.10.1-remove-ai'
 # 这些取值（忽略大小写）表示「直连，不走代理」。
 PROXY_OFF = ('', '0', 'no', 'none', 'direct', 'off')
 # check(proxy=...) 的哨兵：None 表示显式直连，_ENV 表示读环境变量。

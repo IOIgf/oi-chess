@@ -674,6 +674,29 @@ class Room:
             self._sys_chat(f'{name} 加入房间（AI 对手）')
             return True, cid
 
+    def remove_ai(self, cid):
+        """移除一名电脑对手，返回 (ok, 错误信息)。
+
+        与 add_ai 同一时间窗口：**只在等待期**（开始游戏之前）可以移除。
+        开局后配对与战斗帧已定，中途删人会打乱整局结算，所以一律拒绝。
+
+        只能移除电脑，不能移除真人 —— 真人要走「离开」按钮自己退。
+        """
+        with self.lock:
+            if self.state != 'waiting':
+                return False, '游戏已开始，无法移除电脑'
+            p = self.players.get(cid)
+            if not p:
+                return False, '该玩家不在房间里'
+            if not p.get('isAi'):
+                return False, '只能移除电脑，真人请自行离开'
+            name = p['name']
+            del self.players[cid]
+            self.colors.pop(cid, None)
+            self.version += 1
+            self._sys_chat(f'{name} 被移出房间')
+            return True, ''
+
     @staticmethod
     def _ai_traits(p):
         counts = {}
@@ -2826,6 +2849,16 @@ class Handler(http.server.BaseHTTPRequestHandler):
             if not ok:
                 return self._json({'error': res}, 400)
             return self._json({'ok': True, 'aiId': res})
+        elif action == 'removeAi':
+            if pid != room.host:
+                return self._json({'error': '只有房主可以移除电脑'}, 400)
+            target = _as_str(data.get('aiId'), 64)
+            if not target:
+                return self._json({'error': '缺少 aiId'}, 400)
+            ok, err = room.remove_ai(target)
+            if not ok:
+                return self._json({'error': err}, 400)
+            return self._json({'ok': True})
         elif action == 'leave':
             leave_room(pid, room.id, penalize=True)
             return self._json({'ok': True})

@@ -201,6 +201,36 @@ ok(len(r3.players) == 3, 'the waiting-phase AI joined the room')
 ok(r3.players[[c for c in r3.players if c.startswith(s.AI_CID_PREFIX)][-1]]['shop'] == [],
    'a waiting-phase AI gets its shop when the game starts')
 
+# ---- 10.5 移除电脑：与加电脑同一窗口（只有开局之前） ------------------------
+r4 = fresh_room(1, 'normal')
+ok(r4.add_ai('easy')[0], 'add another AI to the same room')
+ok(len(r4.players) == 3, 'the room holds one human and two AIs')
+ai_ids = [c for c in r4.players if c.startswith(s.AI_CID_PREFIX)]
+ok(len(ai_ids) == 2, 'both AIs are addressable by id')
+target = ai_ids[0]
+removed_name = r4.players[target]['name']
+ok(r4.remove_ai(target)[0], 'the host can remove an AI in the waiting phase')
+ok(len(r4.players) == 2, 'the removed AI left the room')
+ok(target not in r4.players, 'the removed AI id is gone')
+ok(target not in r4.colors, 'the removed AI released its color slot')
+ok(r4.version > 0, 'the room version advanced after the removal')
+ok(not r4.remove_ai(target)[0], 'removing the same AI twice is refused')
+ok(not r4.remove_ai('no-such-id')[0], 'removing an unknown id is refused')
+human_id = [c for c in r4.players if not c.startswith(s.AI_CID_PREFIX)][0]
+ok(not r4.remove_ai(human_id)[0], 'a human cannot be removed by the host')
+ok(len(r4.players) == 2, 'the refused human removal changed nothing')
+
+# 开局之后不能移除：配对与战斗帧已定
+r5 = fresh_room(1, 'normal')
+ai5 = [c for c in r5.players if c.startswith(s.AI_CID_PREFIX)][0]
+ok(r5.start('H')[0], 'start the game')
+ok(r5.state == 'prep', 'the game entered the prep phase')
+ok_ai, err_ai = r5.remove_ai(ai5)
+ok(not ok_ai and err_ai == '游戏已开始，无法移除电脑',
+   'remove_ai refuses once the game is running')
+ok(len(r5.players) == 2, 'the refused removal leaves the room untouched')
+ok(r5.pairs_computed is False, 'the pairing is untouched by the refused removal')
+
 # ---- 11. HTTP API（伪 Handler，无需起服务） -------------------------------
 class FakeHandler:
     def __init__(self, data):
@@ -241,6 +271,31 @@ ok(room.add_player('api-guest', '客人')[0], 'a second human joins the room')
 h3 = FakeHandler({'playerId': 'api-guest', 'action': 'addAi', 'level': 'easy'})
 s.Handler._api_action(h3, h3.data)
 ok(h3.status == 400, 'addAi rejected for a non-host')
+
+# ---- removeAi：房主权限与参数校验 ----
+ai_ids = [c for c in room.players if c.startswith(s.AI_CID_PREFIX)]
+h5 = FakeHandler({'playerId': 'api-guest', 'action': 'removeAi',
+                  'aiId': ai_ids[0]})
+s.Handler._api_action(h5, h5.data)
+ok(h5.status == 400, 'removeAi rejected for a non-host')
+ok(ai_ids[0] in room.players, 'the rejected removal left the AI in place')
+
+h6 = FakeHandler({'playerId': 'api-human', 'action': 'removeAi'})
+s.Handler._api_action(h6, h6.data)
+ok(h6.status == 400, 'removeAi without aiId is rejected')
+
+h7 = FakeHandler({'playerId': 'api-human', 'action': 'removeAi',
+                  'aiId': 'no-such-id'})
+s.Handler._api_action(h7, h7.data)
+ok(h7.status == 400, 'removeAi with an unknown id is rejected')
+
+n_before = len(room.players)
+h8 = FakeHandler({'playerId': 'api-human', 'action': 'removeAi',
+                  'aiId': ai_ids[0]})
+s.Handler._api_action(h8, h8.data)
+ok(h8.status == 200, 'removeAi succeeds for the host')
+ok(len(room.players) == n_before - 1, 'removeAi really removed the AI')
+ok(ai_ids[0] not in room.players, 'the removed AI id is gone from the room')
 
 h4 = FakeHandler({'clientId': 'api-human-2', 'name': '真人2', 'aiCount': 99})
 s.Handler._api_rooms(h4, h4.data)

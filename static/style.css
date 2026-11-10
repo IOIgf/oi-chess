@@ -166,6 +166,14 @@ body {
   margin-right: 8px; vertical-align: middle; border: 1px solid var(--line);
 }
 .host-tag { font-size: 11px; padding: 2px 8px; border: 1px solid var(--line); letter-spacing: 2px; }
+/* 房主移除电脑的小按钮 */
+.remove-ai {
+  margin-left: 8px; padding: 2px 8px; font-size: 11px; letter-spacing: 1px;
+  font-family: inherit; cursor: pointer;
+  color: var(--muted); background: transparent;
+  border: 1px solid var(--line); border-radius: 4px;
+}
+.remove-ai:hover { color: var(--accent); border-color: var(--accent); }
 .lobby-actions { display: flex; gap: 12px; justify-content: center; margin-bottom: 16px; }
 
 .chat-panel {

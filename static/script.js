@@ -875,14 +875,15 @@ function renderLobby(d) {
   document.getElementById('roomIdLabel').textContent = d.roomId;
   const list = document.getElementById('playerList');
   const arr = Object.values(d.players);
+  const canManage = d.viewerId === d.host && d.state === 'waiting';
   list.innerHTML = arr.map(p => `
     <div class="player-item">
       <span>${colorDot(p.color)}${escapeHtml(p.name)}${p.isAi ? ` <span class="ai-tag">电脑${p.aiLevel ? '·' + escapeHtml(p.aiLevel) : ''}</span>` : ''}</span>
       ${p.id === d.host ? '<span class="host-tag">房主</span>' : ''}
+      ${p.isAi && canManage ? `<button type="button" class="remove-ai" title="移除这名电脑" onclick="removeAi('${p.id}')">移除</button>` : ''}
     </div>`).join('');
   const aiCtl = document.getElementById('aiControls');
-  if (aiCtl) aiCtl.style.display =
-    (d.viewerId === d.host && d.state === 'waiting') ? 'inline-flex' : 'none';
+  if (aiCtl) aiCtl.style.display = canManage ? 'inline-flex' : 'none';
   const btn = document.getElementById('startBtn');
   if (d.viewerId === d.host) {
     btn.style.display = 'block';
@@ -897,6 +898,10 @@ function renderLobby(d) {
   } else {
     btn.style.display = 'none';
   }
+}
+// 移除一名电脑对手（仅房主、仅开局之前可用）
+async function removeAi(aiId) {
+  if (await doAction('removeAi', { aiId })) toast('已移除这名电脑');
 }
 
 // 羁绊：按流派统计场上棋子，达到 2/4/6 档自动激活对应增益。
